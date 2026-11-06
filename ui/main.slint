@@ -2,14 +2,14 @@
 import { AboutSlint, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
-import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip } from "controls.slint";
+import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip, EditBridge, BridgedLineEdit } from "controls.slint";
 import { Canvas, PageItem, OverlayRect, ContactSheet, SheetItem } from "canvas.slint";
 import { ThumbnailList, ThumbItem, RowList, ListRow, SidebarTabs } from "sidebar.slint";
 import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
 import { InspectorPanel, InfoRow } from "inspector.slint";
 import { SlideshowWindow } from "slideshow.slint";
 
-export { Theme, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
+export { Theme, EditBridge, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
 
 export component MainWindow inherits Window {
     // Document state
@@ -29,6 +29,7 @@ export component MainWindow inherits Window {
     in property <bool> loupe-on;
     in property <bool> has-rect-selection;
     in property <bool> page-bookmarked;
+    in property <bool> has-text-selection;
 
     // Canvas
     in property <[PageItem]> pages;
@@ -129,6 +130,9 @@ export component MainWindow inherits Window {
         }
         Menu {
             title: "Edit";
+            MenuItem { title: "Copy"; shortcut: @keys(Control + "c"); enabled: EditBridge.field-focused || root.has-text-selection || root.has-rect-selection; activated => { root.command("copy"); } }
+            MenuItem { title: "Select All"; shortcut: @keys(Control + "a"); enabled: EditBridge.field-focused || root.has-document; activated => { root.command("select-all"); } }
+            MenuSeparator { }
             MenuItem { title: "Find…"; shortcut: @keys(Control + "f"); enabled: root.has-document; activated => { root.command("find"); } }
             MenuItem { title: "Find Next"; shortcut: @keys(Control + "g"); enabled: root.has-search; activated => { root.command("find-next"); } }
             MenuItem { title: "Find Previous"; shortcut: @keys(Control + Shift + "g"); enabled: root.has-search; activated => { root.command("find-prev"); } }
@@ -268,7 +272,7 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     alignment: center;
                     padding-left: 6px;
-                    search := LineEdit {
+                    search := BridgedLineEdit {
                         width: 190px;
                         enabled: root.has-document;
                         placeholder-text: "Search";
@@ -389,6 +393,8 @@ export component MainWindow inherits Window {
                     ctrl-wheel(d, x, y) => { root.canvas-ctrl-wheel(d, x, y); }
                     key(e) => { return root.canvas-key(e); }
                     pointer(k, x, y, s, c, b) => { root.canvas-pointer(k, x, y, s, c, b); }
+                    can-copy: root.has-text-selection || root.has-rect-selection;
+                    context-command(id) => { root.command(id); }
                 }
                 sheet := ContactSheet {
                     visible: root.contact-sheet;

@@ -64,6 +64,8 @@ export component Canvas inherits Rectangle {
     out property <length> view-width: flick.visible-width;
     out property <length> view-height: flick.visible-height;
     out property <bool> hovered: wheel.has-hover;
+    in property <bool> can-copy;
+    callback context-command(id: string);
 
     callback viewport-changed();
     callback ctrl-wheel(delta: float, x: length, y: length);
@@ -144,6 +146,23 @@ export component Canvas inherits Rectangle {
             double-clicked => {
                 root.pointer(4, self.mouse-x, self.mouse-y, false, false, 0);
             }
+        }
+    }
+
+    // On top of the scroll view: it accepts only right-clicks, everything else falls
+    // through to the pointer TouchArea underneath.
+    ContextMenuArea {
+        width: flick.visible-width;
+        height: flick.visible-height;
+        enabled: root.has-document;
+        Menu {
+            MenuItem { title: "Copy"; enabled: root.can-copy; activated => { root.context-command("copy"); } }
+            MenuItem { title: "Select All"; activated => { root.context-command("select-all"); } }
+            MenuSeparator { }
+            MenuItem { title: "Zoom In"; activated => { root.context-command("zoom-in"); } }
+            MenuItem { title: "Zoom Out"; activated => { root.context-command("zoom-out"); } }
+            MenuItem { title: "Actual Size"; activated => { root.context-command("zoom-actual"); } }
+            MenuItem { title: "Zoom to Fit"; activated => { root.context-command("zoom-fit-page"); } }
         }
     }
 

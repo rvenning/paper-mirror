@@ -9,6 +9,7 @@
 
 mod inspector;
 mod open;
+mod selection;
 mod sheet;
 mod sidebar;
 mod tools;
@@ -122,6 +123,12 @@ pub(crate) struct ViewState {
     pub link_click: Option<(usize, Point)>,
     /// Page the sidebar lists were last highlighted for.
     pub list_page: Option<usize>,
+    /// Character geometry per page for text selection, fetched with the links.
+    pub page_text: HashMap<usize, Rc<crate::core::textsel::PageText>>,
+    pub pending_text: HashSet<usize>,
+    pub text_sel: Option<crate::core::textsel::TextSelection>,
+    /// Where the current text drag started.
+    pub sel_anchor: Option<crate::core::textsel::Caret>,
 }
 
 pub struct DocWindow {
@@ -147,6 +154,8 @@ pub struct DocWindow {
     pub last_error: RefCell<Option<String>>,
     /// Last external link the user chose to open (kept for tests).
     pub last_opened_link: RefCell<Option<String>>,
+    /// Last text copied (kept for tests; the test backend never touches the clipboard).
+    pub last_copied: RefCell<Option<String>>,
 }
 
 pub fn display_mode_from(s: &str) -> DisplayMode {
@@ -202,6 +211,7 @@ impl DocWindow {
             slideshow: RefCell::new(None),
             last_error: RefCell::new(None),
             last_opened_link: RefCell::new(None),
+            last_copied: RefCell::new(None),
         });
         w.ui.set_pages(ModelRc::from(w.pages_model.clone()));
         w.ui.set_thumbs(ModelRc::from(w.thumbs_model.clone()));
@@ -317,6 +327,8 @@ impl DocWindow {
                     crate::platform_windows::shell::reveal_in_explorer(&p);
                 }
             }
+            "copy" => self.copy(),
+            "select-all" => self.select_all(),
             "find" => {
                 self.ui.invoke_focus_search();
             }
@@ -403,6 +415,9 @@ impl DocWindow {
         st.links.clear();
         st.pending_links.clear();
         st.list_page = None;
+        st.page_text.clear();
+        st.pending_text.clear();
+        st.text_sel = None;
         drop(st);
         self.render_gen.bump();
         self.thumb_gen.bump();
@@ -419,6 +434,7 @@ impl DocWindow {
         self.ui.set_has_search(false);
         self.ui.set_search_status(SharedString::new());
         self.ui.set_has_rect_selection(false);
+        self.ui.set_has_text_selection(false);
         self.ui.set_contact_sheet(false);
     }
 

@@ -5,3 +5,4 @@ pub mod commands;
 pub mod filetype;
 pub mod geometry;
 pub mod layout;
+pub mod textsel;

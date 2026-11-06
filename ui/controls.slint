@@ -1,5 +1,29 @@
 // Reusable Paper Mirror controls.
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+
+// Menu-bar shortcuts are matched before the focused widget sees a key, so Edit menu
+// commands such as Copy (Ctrl+C) are forwarded to whichever text field has focus.
+export global EditBridge {
+    in-out property <bool> field-focused;
+    in-out property <string> op;
+    in-out property <int> serial;
+}
+
+export component BridgedLineEdit inherits LineEdit {
+    property <int> bridge-serial: EditBridge.serial;
+    changed bridge-serial => {
+        if self.has-focus {
+            if EditBridge.op == "copy" { self.copy(); }
+            else if EditBridge.op == "cut" { self.cut(); }
+            else if EditBridge.op == "paste" { self.paste(); }
+            else if EditBridge.op == "select-all" { self.select-all(); }
+            else if EditBridge.op == "undo" { self.undo(); }
+            else if EditBridge.op == "redo" { self.redo(); }
+        }
+    }
+    changed has-focus => { EditBridge.field-focused = self.has-focus; }
+}
 
 // Window-level tooltip state; the main window draws the bubble above everything.
 export global Tooltip {

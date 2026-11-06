@@ -144,3 +144,28 @@ pub fn page_text(doc: &PdfDoc, page_index: usize) -> String {
     doc.with_page(page_index, |page| page.text().map(|tp| text_range(&tp, 0, char_count(&tp))).unwrap_or_default())
         .unwrap_or_default()
 }
+
+/// Character geometry and text of one page for synchronous selection on the UI
+/// thread. Generated characters (inferred spaces and line breaks) get empty boxes.
+pub fn page_geometry(doc: &PdfDoc, page_index: usize) -> crate::core::textsel::PageText {
+    doc.with_page(page_index, |page| {
+        let Some(tp) = page.text() else { return Default::default() };
+        let n = char_count(&tp);
+        let mut units = vec![0u16; n + 1];
+        let written =
+            if n > 0 { unsafe { b().FPDFText_GetText(tp.handle(), 0, n as c_int, units.as_mut_ptr()) } } else { 0 };
+        units.truncate((written.max(1) as usize - 1).min(n));
+        units.resize(n, 0);
+        let boxes = (0..n)
+            .map(|i| {
+                if unsafe { b().FPDFText_IsGenerated(tp.handle(), i as c_int) } == 1 {
+                    Rect::default()
+                } else {
+                    char_box(page, &tp, i).unwrap_or_default()
+                }
+            })
+            .collect();
+        crate::core::textsel::PageText { units, boxes }
+    })
+    .unwrap_or_default()
+}

@@ -27,7 +27,7 @@ fn pump_until(timeout: Duration, cond: impl Fn() -> bool + 'static) -> bool {
         }
     });
     slint::run_event_loop_until_quit().unwrap();
-    
+
     *ok.borrow()
 }
 

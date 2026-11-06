@@ -25,6 +25,8 @@ pub const COMMANDS: &[CommandInfo] = &[
     c("close", "File", "Close Window", Some("Ctrl+W")),
     c("show-in-explorer", "File", "Show in File Explorer", None),
     // Edit
+    c("copy", "Edit", "Copy", Some("Ctrl+C")),
+    c("select-all", "Edit", "Select All", Some("Ctrl+A")),
     c("find", "Edit", "Find…", Some("Ctrl+F")),
     c("find-next", "Edit", "Find Next", Some("Ctrl+G")),
     c("find-prev", "Edit", "Find Previous", Some("Ctrl+Shift+G")),

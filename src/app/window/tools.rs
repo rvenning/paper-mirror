@@ -6,6 +6,7 @@ use slint::{ComponentHandle, Image, Rgba8Pixel, SharedPixelBuffer};
 use super::{DocWindow, Drag, Tool, ViewState};
 use crate::core::geometry::{Point, Rect};
 use crate::core::layout::{self, PX_PER_PT, ZoomMode};
+use crate::core::textsel::TextSelection;
 use crate::pdf::document::RenderTarget;
 use crate::pdf::engine::{DocId, Priority};
 use crate::pdf::outline::{self, LinkTarget};
@@ -21,6 +22,7 @@ pub(crate) const POINTER_DOWN: i32 = 0;
 pub(crate) const POINTER_MOVE: i32 = 1;
 pub(crate) const POINTER_UP: i32 = 2;
 pub(crate) const POINTER_CANCEL: i32 = 3;
+pub(crate) const POINTER_DOUBLE: i32 = 4;
 
 impl DocWindow {
     pub(crate) fn set_tool(&self, tool: Tool) {
@@ -53,39 +55,46 @@ impl DocWindow {
     }
 
     /// Canvas pointer events in content coordinates.
-    pub fn pointer(&self, kind: i32, p: Point, _shift: bool, _ctrl: bool, button: i32) {
+    pub fn pointer(&self, kind: i32, p: Point, shift: bool, _ctrl: bool, button: i32) {
         if !self.has_document() || button != 0 {
             return;
         }
         match kind {
-            POINTER_DOWN => self.pointer_down(p),
+            POINTER_DOWN => self.pointer_down(p, shift),
             POINTER_MOVE => self.pointer_move(p),
-            POINTER_UP => self.pointer_up(p),
+            POINTER_UP => self.pointer_up(p, shift),
             POINTER_CANCEL => {
                 self.st.borrow_mut().drag = None;
                 self.ui.set_loupe_visible(false);
             }
+            POINTER_DOUBLE if self.st.borrow().tool == Tool::Text => self.select_word_at(p),
             _ => {}
         }
     }
 
-    fn pointer_down(&self, p: Point) {
+    fn pointer_down(&self, p: Point, shift: bool) {
+        let caret = self.caret_at_content(p);
         let mut st = self.st.borrow_mut();
         let Some(page) = st.layout.page_at(p).map(|(i, _)| i).or_else(|| st.layout.nearest_page(p)) else { return };
         let pp = clamp_to_page(&st, page, st.layout.to_page(page, p));
-        match st.tool {
-            Tool::Rect => {
-                st.drag = Some(Drag { page, start: pp, moved: false });
-            }
-            Tool::Text => {
-                st.link_click = link_under(&st, page, pp).then_some((page, pp));
-                st.drag = Some(Drag { page, start: pp, moved: false });
+        st.drag = Some(Drag { page, start: pp, moved: false });
+        if st.tool == Tool::Text {
+            st.link_click = link_under(&st, page, pp).then_some((page, pp));
+            // Shift-click extends an existing selection from its anchor.
+            st.sel_anchor = match (shift, st.text_sel) {
+                (true, Some(sel)) => Some(sel.anchor),
+                _ => caret,
+            };
+            if shift && let (Some(anchor), Some(focus)) = (st.sel_anchor, caret) {
+                drop(st);
+                self.set_text_selection(Some(TextSelection { anchor, focus }));
             }
         }
     }
 
     fn pointer_move(&self, p: Point) {
-        let mut changed = false;
+        let mut rect_changed = false;
+        let mut text_anchor = None;
         {
             let mut st = self.st.borrow_mut();
             if let Some(mut drag) = st.drag {
@@ -95,24 +104,34 @@ impl DocWindow {
                     drag.moved = true;
                     st.link_click = None;
                 }
-                if drag.moved && st.tool == Tool::Rect {
-                    st.rect_selection = Some((drag.page, Rect::from_points(drag.start, pp)));
-                    changed = true;
+                if drag.moved {
+                    match st.tool {
+                        Tool::Rect => {
+                            st.rect_selection = Some((drag.page, Rect::from_points(drag.start, pp)));
+                            rect_changed = true;
+                        }
+                        Tool::Text => text_anchor = st.sel_anchor,
+                    }
                 }
                 st.drag = Some(drag);
             }
         }
-        if changed {
+        if rect_changed {
             self.ui.set_has_rect_selection(true);
             self.refresh_overlays();
+        }
+        if let Some(anchor) = text_anchor {
+            if let Some(focus) = self.caret_at_content(p) {
+                self.set_text_selection(Some(TextSelection { anchor, focus }));
+            }
         }
         self.update_hover(p);
     }
 
-    fn pointer_up(&self, p: Point) {
-        let (drag, link) = {
+    fn pointer_up(&self, p: Point, shift: bool) {
+        let (drag, link, tool) = {
             let mut st = self.st.borrow_mut();
-            (st.drag.take(), st.link_click.take())
+            (st.drag.take(), st.link_click.take(), st.tool)
         };
         let Some(drag) = drag else { return };
         if !drag.moved {
@@ -124,7 +143,10 @@ impl DocWindow {
                 }
                 return;
             }
-            // A plain click clears any rectangular selection.
+            // A plain click clears selections.
+            if tool == Tool::Text && !shift && self.text_selection().is_some() {
+                self.set_text_selection(None);
+            }
             let had = self.st.borrow_mut().rect_selection.take().is_some();
             if had {
                 self.ui.set_has_rect_selection(false);
@@ -183,6 +205,9 @@ impl DocWindow {
             let cursor = match (st.tool, over) {
                 (Tool::Rect, _) => "crosshair",
                 (Tool::Text, Some((page, pp))) if link_under(&st, page, pp) => "pointer",
+                (Tool::Text, Some((page, pp))) if st.page_text.get(&page).is_some_and(|t| t.is_over_text(pp, 1.0)) => {
+                    "text"
+                }
                 _ => "default",
             };
             (cursor, st.loupe_on.then_some(over).flatten())
@@ -232,7 +257,7 @@ impl DocWindow {
         });
     }
 
-    /// Requests link rectangles for pages that just became visible.
+    /// Requests link rectangles and text geometry for pages that just became visible.
     pub(crate) fn ensure_links(&self, pages: &[usize]) {
         let (doc_id, wanted) = {
             let mut st = self.st.borrow_mut();
@@ -248,12 +273,21 @@ impl DocWindow {
             self.engine.submit(Priority::Render, None, move |s| {
                 let Some(doc) = s.doc(doc_id) else { return };
                 let rects = outline::link_rects(doc, page);
+                let geometry = crate::pdf::text::page_geometry(doc, page);
                 let _ = slint::invoke_from_event_loop(move || {
                     super::super::with_window(win, |w| {
-                        let mut st = w.st.borrow_mut();
-                        if st.doc.as_ref().is_some_and(|d| d.id == doc_id) {
+                        if w.st.borrow().doc.as_ref().is_none_or(|d| d.id != doc_id) {
+                            return;
+                        }
+                        {
+                            let mut st = w.st.borrow_mut();
                             st.pending_links.remove(&page);
                             st.links.insert(page, rects);
+                        }
+                        w.insert_page_text(page, geometry);
+                        // A Select All waiting on this page can now be drawn.
+                        if w.st.borrow().text_sel.is_some() {
+                            w.refresh_overlays();
                         }
                     });
                 });
@@ -317,6 +351,10 @@ impl DocWindow {
         if self.clear_selection() {
             return true;
         }
+        if self.text_selection().is_some() {
+            self.set_text_selection(None);
+            return true;
+        }
         if self.st.borrow().loupe_on {
             self.toggle_loupe();
             return true;
@@ -334,7 +372,8 @@ fn link_under(st: &ViewState, page: usize, pp: Point) -> bool {
     st.links.get(&page).is_some_and(|rs| rs.iter().any(|r| r.contains(pp)))
 }
 
-/// Search matches, the current match and the rectangular selection on `pages`.
+/// Search matches, the current match, the text selection and the rectangular
+/// selection on `pages`.
 pub(crate) fn build_overlays(st: &ViewState, pages: &[usize]) -> Vec<OverlayRect> {
     let mut out = Vec::new();
     let hits = &st.search.hits;
@@ -348,6 +387,15 @@ pub(crate) fn build_overlays(st: &ViewState, pages: &[usize]) -> Vec<OverlayRect
             for r in &h.rects {
                 let v = st.layout.rect_to_view(page, r.inflate(0.5));
                 out.push(OverlayRect { x: v.x, y: v.y, width: v.w, height: v.h, kind });
+            }
+        }
+        if let Some(sel) = st.text_sel
+            && let Some(text) = st.page_text.get(&page)
+            && let Some((a, b)) = sel.range_on(page, text.len())
+        {
+            for r in text.range_rects(a, b) {
+                let v = st.layout.rect_to_view(page, r);
+                out.push(OverlayRect { x: v.x, y: v.y, width: v.w, height: v.h, kind: 2 });
             }
         }
         if let Some((p, r)) = st.rect_selection.filter(|(p, _)| *p == page) {

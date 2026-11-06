@@ -115,3 +115,27 @@ fn document_info() {
     assert_eq!(i.encryption, "AES 256-bit");
     assert!(i.permissions.iter().all(|(_, allowed)| *allowed));
 }
+
+#[test]
+fn page_geometry_supports_selection() {
+    let d = open(fixtures::text_document());
+    let g = text::page_geometry(&d, 0);
+    assert_eq!(g.units.len(), g.boxes.len());
+    let s = g.text(0, g.len());
+    assert!(s.contains("Fixture page 1"), "{s}");
+    assert!(s.contains("\r\n"), "lines are separated by CRLF");
+    // Find "lighthouse" and check its first character's box hit-tests back to it.
+    let utf16: Vec<u16> = NEEDLE.encode_utf16().collect();
+    let at = g.units.windows(utf16.len()).position(|w| w == utf16.as_slice()).expect("needle in page text");
+    let b = g.boxes[at];
+    assert!(!b.is_empty());
+    let left_half = Point::new(b.x + b.w * 0.25, b.center().y);
+    assert_eq!(g.caret_at(left_half), at);
+    assert_eq!(g.word_at(at + 2), (at, at + utf16.len()));
+    assert_eq!(g.text(at, at + utf16.len()), NEEDLE);
+    // Generated characters (inferred line breaks) have no box.
+    let crlf = g.units.iter().position(|u| *u == 13).unwrap();
+    assert!(g.boxes[crlf].is_empty());
+    let rects = g.range_rects(0, g.len());
+    assert_eq!(rects.len(), 4, "four text lines: {rects:?}");
+}

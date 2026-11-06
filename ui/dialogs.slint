@@ -1,7 +1,7 @@
 // In-window modal panels: text/password prompt and the keyboard-shortcut reference.
 import { LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { PlainButton } from "controls.slint";
+import { PlainButton, BridgedLineEdit } from "controls.slint";
 
 export struct ShortcutRow {
     menu: string,
@@ -39,7 +39,7 @@ export component PromptPanel inherits Rectangle {
         spacing: 10px;
         Text { text: root.heading; font-size: 15px; font-weight: 600; color: Theme.text; wrap: word-wrap; }
         if root.message != "": Text { text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
-        input := LineEdit {
+        input := BridgedLineEdit {
             text <=> root.value;
             input-type: root.password ? InputType.password : InputType.text;
             accessible-label: root.heading;
