@@ -149,7 +149,7 @@ fn viewing_features() {
 
     // --- Rectangular selection and Zoom to Selection ---------------------------
     assert!(w.command("tool-rect"));
-    assert_eq!(w.ui.get_tool(), "rect");
+    assert_eq!(w.ui.get_tool(), "tool-rect");
     // Drag across the top-left quarter of the current page.
     let (start, end) = {
         let page_rect = w.ui.get_pages().iter().find(|p| p.index == 8).unwrap();

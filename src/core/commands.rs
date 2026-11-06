@@ -180,6 +180,11 @@ mod tests {
                 assert!(find(id).is_some(), "{}: command {id:?} is not in the registry", path.display());
                 used.insert(id.to_string());
             }
+            // Buttons generated from `for` lists dispatch `command(t.id)` with `id: "..."`.
+            for (i, _) in src.match_indices("id: \"") {
+                let rest = &src[i + 5..];
+                used.insert(rest[..rest.find('"').unwrap()].to_string());
+            }
             // MenuItem { title: ...; shortcut: @keys(...); activated => { root.command("id"); } }
             for line in src.lines().filter(|l| l.contains("MenuItem") && l.contains("@keys(")) {
                 let keys = &line[line.find("@keys(").unwrap() + 6..];
