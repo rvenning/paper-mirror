@@ -23,8 +23,18 @@ impl DocWindow {
     /// Save (in place) or Save As. Redactions ask first and default to a new file.
     pub(crate) fn save(&self, save_as: bool) {
         self.finish_pending_edit();
-        let Some(path) = self.doc_path() else { return };
-        let mut save_as = save_as;
+        // An untitled document (Duplicate) is saved with Save As.
+        let (path, mut save_as) = match self.doc_path() {
+            Some(p) => (p, save_as),
+            None => (PathBuf::from(format!("{}.pdf", self.title())), true),
+        };
+        if !save_as && self.is_locked() {
+            self.error(
+                &format!("“{}” is locked.", file_name(&path)),
+                "Unlock it with File > Unlock, or use Save As to save a copy.",
+            );
+            return;
+        }
         if self.has_redactions() {
             match self.ask_redaction_save() {
                 Some(true) => save_as = true,
@@ -44,16 +54,7 @@ impl DocWindow {
         self.save_to(target, SaveOptions::default(), AfterSave::Nothing);
     }
 
-    pub(crate) fn export_pdf(&self) {
-        self.finish_pending_edit();
-        let Some(path) = self.doc_path() else { return };
-        let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "Document".into());
-        if let Some(target) = self.choose_save_path(&path, &format!("{stem} (Flattened).pdf")) {
-            self.save_to_copy(target, SaveOptions { flatten: true, ..Default::default() });
-        }
-    }
-
-    fn choose_save_path(&self, current: &std::path::Path, suggested: &str) -> Option<PathBuf> {
+    pub(crate) fn choose_save_path(&self, current: &std::path::Path, suggested: &str) -> Option<PathBuf> {
         if !super::super::context().winit {
             return None;
         }

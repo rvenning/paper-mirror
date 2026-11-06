@@ -148,6 +148,43 @@ impl DocWindow {
         };
         super::super::measure("document-opened");
         let title = file_name(&path);
+        self.adopt_document(id, Some(path), title, sizes, annots, password);
+    }
+
+    /// Opens a document held in memory (File > Duplicate). It has no file until saved.
+    pub fn open_memory(&self, bytes: std::sync::Arc<Vec<u8>>, title: String) {
+        let id = self.engine.new_doc_id();
+        let win = self.id;
+        self.engine.submit(Priority::Interactive, None, move |st| {
+            let result = PdfDoc::open(Source::Memory(bytes), None).map(|doc| {
+                let sizes: Vec<Size> = doc.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
+                let mut next = 0;
+                let annots = crate::pdf::annot_io::extract(&doc, &mut next);
+                st.docs.insert(id, doc);
+                (sizes, annots)
+            });
+            let _ = slint::invoke_from_event_loop(move || {
+                super::super::with_window(win, |w| match result {
+                    Ok((sizes, annots)) => {
+                        w.adopt_document(id, None, title, sizes, annots, None);
+                        w.mark_dirty();
+                    }
+                    Err(e) => w.error("The copy could not be opened.", &e.to_string()),
+                });
+            });
+        });
+    }
+
+    /// Makes an engine document this window's document.
+    fn adopt_document(
+        &self,
+        id: DocId,
+        path: Option<PathBuf>,
+        title: String,
+        sizes: Vec<Size>,
+        annots: Vec<crate::core::annot::Annotation>,
+        password: Option<String>,
+    ) {
         self.release_document();
         {
             let mut st = self.st.borrow_mut();
@@ -155,16 +192,19 @@ impl DocWindow {
             st.selected = vec![0];
             st.zoom_mode = ZoomMode::FitWidth;
             st.layout = Default::default();
-            st.doc = Some(OpenDoc { id, path: Some(path.clone()), title: title.clone(), sizes: sizes.clone() });
+            st.doc = Some(OpenDoc { id, path: path.clone(), title: title.clone(), sizes: sizes.clone() });
             st.next_annot_id = annots.iter().map(|a| a.id).max().unwrap_or(0);
             st.annots = annots;
         }
         *self.open_password.borrow_mut() = password;
         self.ui.set_doc_title(title.into());
         self.ui.set_has_document(true);
-        self.ui.set_has_file(true);
+        self.ui.set_has_file(path.is_some());
         self.ui.set_multi_page(sizes.len() > 1);
-        super::super::update_settings(|s| s.add_recent(&path));
+        self.ui.set_locked(self.is_locked());
+        if let Some(path) = &path {
+            super::super::update_settings(|s| s.add_recent(path));
+        }
         super::super::refresh_window_menus();
         self.ui.set_sidebar_mode("thumbnails".into());
         self.load_outline(id);

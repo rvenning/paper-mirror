@@ -109,12 +109,27 @@ pub struct SaveOptions {
     pub protection: Option<Protection>,
     /// The document was opened with this password; keep it protected.
     pub reopen_password: Option<String>,
+    /// Preview-style PDF effect applied to the output.
+    pub effect: Option<super::effects::Effect>,
+    /// Downsample and recompress images.
+    pub reduce_size: bool,
 }
 
 /// Serialises `doc` with `annots` (display space) applied.
 pub fn save(doc: &PdfDoc, annots: &[Annotation], opts: &SaveOptions) -> Result<Vec<u8>, String> {
     let encrypted = doc.doc.security_revision() != -1;
-    let base = doc.doc.save_to_vec(encrypted).ok_or("The PDF engine could not write the document.")?;
+    let mut base = doc.doc.save_to_vec(encrypted).ok_or("The PDF engine could not write the document.")?;
+    if opts.effect.is_some() || opts.reduce_size {
+        // Work on a copy so the open document is untouched.
+        let copy = PdfDoc::open(ffi::Source::Memory(std::sync::Arc::new(base)), None).map_err(|e| e.to_string())?;
+        if let Some(e) = opts.effect {
+            super::effects::apply_effect(&copy, e)?;
+        }
+        if opts.reduce_size {
+            super::effects::reduce_size(&copy)?;
+        }
+        base = copy.doc.save_to_vec(false).ok_or("The PDF engine could not write the document.")?;
+    }
     let ts = transforms(doc);
     let render_lens = |page: usize, source: Rect, w: u32, h: u32| -> Option<Vec<u8>> {
         let scale = w as f32 / source.w.max(0.01);

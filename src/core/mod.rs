@@ -6,5 +6,6 @@ pub mod commands;
 pub mod filetype;
 pub mod geometry;
 pub mod layout;
+pub mod pagemap;
 pub mod textpath;
 pub mod textsel;

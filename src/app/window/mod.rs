@@ -9,10 +9,12 @@
 //! - `markup`: annotations, styles, text editing, undo
 //! - `saving`: save, export, unsaved-changes prompts, originals
 
+mod exporting;
 mod forms;
 mod inspector;
 mod markup;
 mod open;
+mod organize;
 mod pages;
 mod saving;
 mod selection;
@@ -179,6 +181,9 @@ pub(crate) struct ViewState {
     /// The original file has been backed up for this session (first in-place save).
     pub original_saved: bool,
     pub fields: Vec<crate::pdf::forms::Field>,
+    /// Anchor for Shift-click range selection of thumbnails.
+    pub page_anchor: usize,
+    pub thumb_drag: Option<organize::ThumbDrag>,
 }
 
 pub struct DocWindow {
@@ -291,6 +296,7 @@ impl DocWindow {
         w.ui.set_note_rows(ModelRc::from(w.notes_model.clone()));
         w.ui.set_form_fields(ModelRc::from(w.forms_model.clone()));
         w.init_markup_ui();
+        w.init_export_ui();
         w.ui.set_app_version(crate::VERSION.into());
         w.ui.set_display_mode(display_mode_name(mode).into());
         w.ui.set_sidebar_visible(sidebar_visible);
@@ -323,7 +329,12 @@ impl DocWindow {
         self.ui.on_canvas_pointer(move |kind, x, y, shift, ctrl, button| {
             super::with_window(id, |w| w.pointer(kind, Point::new(x, y), shift, ctrl, button))
         });
-        self.ui.on_thumb_clicked(move |i, _ctrl, _shift| super::with_window(id, |w| w.go_to_page(i as usize)));
+        self.ui.on_thumb_clicked(move |i, ctrl, shift| {
+            super::with_window(id, |w| w.thumb_clicked(i as usize, ctrl, shift))
+        });
+        self.ui.on_thumb_drag(move |i, y| super::with_window(id, |w| w.thumb_drag(i as usize, y)));
+        self.ui.on_thumb_drop(move || super::with_window(id, |w| w.thumb_drop()));
+        self.ui.on_export_confirm(move || super::with_window(id, |w| w.export_confirm()));
         self.ui.on_open_recent(move |i| super::with_window(id, |w| w.open_recent(i as usize)));
         self.ui.on_activate_window(move |i| super::activate_window_at(i as usize));
         self.ui.on_prompt_accepted(move |kind, value| {
@@ -430,7 +441,17 @@ impl DocWindow {
             }
             "save" => self.save(false),
             "save-as" => self.save(true),
-            "export-pdf" => self.export_pdf(),
+            "export-pdf" => self.show_export(),
+            "duplicate" => self.duplicate(),
+            "revert-saved" => self.revert_to_saved(),
+            "revert-original" => self.revert_to_original(),
+            "lock" => self.toggle_lock(),
+            "rotate-left" => self.rotate_pages(-1),
+            "rotate-right" => self.rotate_pages(1),
+            "delete-pages" => self.delete_pages(),
+            "insert-blank" => self.insert_blank_page(),
+            "insert-file" => self.insert_from_file(None),
+            "crop" => self.crop_to_selection(),
             "undo" => self.undo(),
             "redo" => self.redo(),
             "delete" => {
@@ -569,6 +590,7 @@ impl DocWindow {
         st.lens_cache.clear();
         st.original_saved = false;
         st.fields.clear();
+        st.thumb_drag = None;
         drop(st);
         self.render_gen.bump();
         self.thumb_gen.bump();

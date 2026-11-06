@@ -541,7 +541,9 @@ impl DocWindow {
         use slint::platform::Key;
         let t = e.text.as_str();
         let is = |k: Key| t == SharedString::from(k).as_str();
-        if is(Key::DownArrow) || is(Key::RightArrow) {
+        if is(Key::Delete) || is(Key::Backspace) {
+            self.delete_pages();
+        } else if is(Key::DownArrow) || is(Key::RightArrow) {
             self.step_page(1);
         } else if is(Key::UpArrow) || is(Key::LeftArrow) {
             self.step_page(-1);

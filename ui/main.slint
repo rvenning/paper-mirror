@@ -6,7 +6,7 @@ import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip, EditBrid
 import { Canvas, PageItem, OverlayRect, ContactSheet, SheetItem, AnnotPrim } from "canvas.slint";
 import { MarkupBar } from "markup.slint";
 import { ThumbnailList, ThumbItem, RowList, ListRow, SidebarTabs } from "sidebar.slint";
-import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
+import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow, ExportPanel } from "dialogs.slint";
 import { InspectorPanel, InfoRow } from "inspector.slint";
 import { SlideshowWindow } from "slideshow.slint";
 import { FormFieldView, SignatureView, SignaturesPanel } from "forms.slint";
@@ -106,6 +106,20 @@ export component MainWindow inherits Window {
     out property <length> thumbs-scroll-y: thumbs.scroll-y;
     out property <length> thumbs-view-height: thumbs.view-height;
     out property <length> thumbs-view-width: thumbs.view-width;
+    in property <bool> thumb-drop-visible;
+    in property <length> thumb-drop-y;
+    in property <bool> locked;
+
+    // Export panel
+    in-out property <bool> export-visible;
+    in property <[string]> export-effects;
+    in-out property <int> export-effect;
+    in-out property <bool> export-reduce;
+    in-out property <bool> export-encrypt;
+    in-out property <bool> export-flatten;
+    in-out property <string> export-password;
+    in-out property <string> export-password2;
+    in property <string> export-error;
     in property <[ListRow]> outline-rows;
     in property <[ListRow]> bookmark-rows;
     in property <[ListRow]> search-rows;
@@ -166,6 +180,9 @@ export component MainWindow inherits Window {
     callback pad-clear();
     callback pad-save();
     callback signatures-closed();
+    callback thumb-drag(index: int, y: length);
+    callback thumb-drop();
+    callback export-confirm();
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
@@ -188,7 +205,15 @@ export component MainWindow inherits Window {
             MenuSeparator { }
             MenuItem { title: "Save"; shortcut: @keys(Control + "s"); enabled: root.has-file; activated => { root.command("save"); } }
             MenuItem { title: "Save As…"; shortcut: @keys(Control + Shift + "s"); enabled: root.has-file; activated => { root.command("save-as"); } }
-            MenuItem { title: "Export as Flattened PDF…"; enabled: root.has-file; activated => { root.command("export-pdf"); } }
+            MenuItem { title: "Duplicate"; enabled: root.has-document; activated => { root.command("duplicate"); } }
+            MenuItem { title: "Export as PDF…"; enabled: root.has-document; activated => { root.command("export-pdf"); } }
+            Menu {
+                title: "Revert To";
+                enabled: root.has-file;
+                MenuItem { title: "Last Saved Version"; activated => { root.command("revert-saved"); } }
+                MenuItem { title: "Original"; activated => { root.command("revert-original"); } }
+            }
+            MenuItem { title: root.locked ? "Unlock" : "Lock"; enabled: root.has-file; activated => { root.command("lock"); } }
             MenuSeparator { }
             MenuItem { title: "Show in File Explorer"; enabled: root.has-file; activated => { root.command("show-in-explorer"); } }
             MenuSeparator { }
@@ -202,6 +227,13 @@ export component MainWindow inherits Window {
             MenuItem { title: "Copy"; shortcut: @keys(Control + "c"); enabled: EditBridge.field-focused || root.has-text-selection || root.has-rect-selection; activated => { root.command("copy"); } }
             MenuItem { title: "Select All"; shortcut: @keys(Control + "a"); enabled: EditBridge.field-focused || root.has-document; activated => { root.command("select-all"); } }
             MenuItem { title: "Delete"; enabled: root.annot-selected; activated => { root.command("delete"); } }
+            MenuItem { title: "Delete Pages"; enabled: root.has-document && root.multi-page; activated => { root.command("delete-pages"); } }
+            Menu {
+                title: "Insert";
+                enabled: root.has-document;
+                MenuItem { title: "Blank Page"; activated => { root.command("insert-blank"); } }
+                MenuItem { title: "Pages from File…"; activated => { root.command("insert-file"); } }
+            }
             MenuSeparator { }
             MenuItem { title: "Find…"; shortcut: @keys(Control + "f"); enabled: root.has-document; activated => { root.command("find"); } }
             MenuItem { title: "Find Next"; shortcut: @keys(Control + "g"); enabled: root.has-search; activated => { root.command("find-next"); } }
@@ -277,6 +309,10 @@ export component MainWindow inherits Window {
             }
             MenuItem { title: "Redact"; shortcut: @keys(Control + Shift + "r"); enabled: root.has-document; activated => { root.command("tool-redact"); } }
             MenuItem { title: "Signatures…"; enabled: root.has-document; activated => { root.command("tool-signature"); } }
+            MenuSeparator { }
+            MenuItem { title: "Rotate Left"; shortcut: @keys(Control + "l"); enabled: root.has-document; activated => { root.command("rotate-left"); } }
+            MenuItem { title: "Rotate Right"; shortcut: @keys(Control + "r"); enabled: root.has-document; activated => { root.command("rotate-right"); } }
+            MenuItem { title: "Crop"; shortcut: @keys(Control + "k"); enabled: root.has-rect-selection; activated => { root.command("crop"); } }
             MenuSeparator { }
             MenuItem { title: "Show Magnifier"; shortcut: @keys(Control + "`"); checkable: true; checked: root.loupe-on; enabled: root.has-document; activated => { root.command("toggle-loupe"); } }
             MenuItem { title: "Show Inspector"; shortcut: @keys(Control + "i"); checkable: true; checked: root.inspector-visible; enabled: root.has-document; activated => { root.command("inspector"); } }
@@ -363,6 +399,15 @@ export component MainWindow inherits Window {
                         enabled: root.has-document;
                         left-clicked => { root.command("zoom-out"); }
                         right-clicked => { root.command("zoom-in"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.rotate-left;
+                        tip: "Rotate left (Ctrl+L)";
+                        enabled: root.has-document;
+                        clicked => { root.command("rotate-left"); }
                     }
                 }
                 VerticalLayout {
@@ -468,6 +513,11 @@ export component MainWindow inherits Window {
                             viewport-changed => { root.thumbs-viewport-changed(); }
                             item-clicked(i, c, s) => { root.thumb-clicked(i, c, s); }
                             key(e) => { return root.thumbs-key(e); }
+                            item-drag(i, y) => { root.thumb-drag(i, y); }
+                            item-drop => { root.thumb-drop(); }
+                            context-command(id) => { root.command(id); }
+                            drop-visible: root.thumb-drop-visible;
+                            drop-y: root.thumb-drop-y;
                         }
                         if root.sidebar-mode == "contents": RowList {
                             rows: root.outline-rows;
@@ -588,7 +638,22 @@ export component MainWindow inherits Window {
         busy-label := Text { text: root.busy-text; color: white; font-size: Theme.font-size; }
     }
 
-    if root.prompt-kind != "" || root.shortcuts-visible || root.signatures-visible: Scrim { }
+    if root.prompt-kind != "" || root.shortcuts-visible || root.signatures-visible || root.export-visible: Scrim { }
+
+    if root.export-visible: ExportPanel {
+        x: (root.width - self.width) / 2;
+        y: max(30px, (root.height - self.height) / 3);
+        effects: root.export-effects;
+        effect <=> root.export-effect;
+        reduce <=> root.export-reduce;
+        encrypt <=> root.export-encrypt;
+        flatten <=> root.export-flatten;
+        password <=> root.export-password;
+        password2 <=> root.export-password2;
+        error: root.export-error;
+        confirm => { root.export-confirm(); }
+        cancel => { root.export-visible = false; root.focus-canvas(); }
+    }
 
     if root.signatures-visible: SignaturesPanel {
         x: (root.width - self.width) / 2;

@@ -1,5 +1,5 @@
 // In-window modal panels: text/password prompt and the keyboard-shortcut reference.
-import { LineEdit, ScrollView } from "std-widgets.slint";
+import { LineEdit, ScrollView, ComboBox, CheckBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { PlainButton, BridgedLineEdit } from "controls.slint";
 
@@ -108,6 +108,57 @@ export component ShortcutsPanel inherits Rectangle {
         key-pressed(e) => {
             if e.text == Key.Escape { root.closed(); return accept; }
             reject
+        }
+    }
+}
+
+// Export as PDF: effect, size reduction, password protection, flattening.
+export component ExportPanel inherits Rectangle {
+    in property <[string]> effects;
+    in-out property <int> effect;
+    in-out property <bool> reduce;
+    in-out property <bool> encrypt;
+    in-out property <bool> flatten;
+    in-out property <string> password;
+    in-out property <string> password2;
+    in property <string> error;
+    callback confirm();
+    callback cancel();
+    width: 400px;
+    height: layout.preferred-height;
+    background: Theme.panel-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.separator;
+    accessible-role: groupbox;
+    accessible-label: "Export as PDF";
+    layout := VerticalLayout {
+        padding: 18px;
+        spacing: 10px;
+        Text { text: "Export as PDF"; font-size: 15px; font-weight: 600; color: Theme.text; }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Effect"; width: 90px; color: Theme.text-secondary; vertical-alignment: center; }
+            ComboBox {
+                model: root.effects;
+                current-index <=> root.effect;
+                accessible-label: "PDF effect";
+            }
+        }
+        CheckBox { text: "Reduce file size (images at 150 ppi)"; checked <=> root.reduce; }
+        CheckBox { text: "Flatten annotations and form fields"; checked <=> root.flatten; }
+        CheckBox { text: "Encrypt with a password"; checked <=> root.encrypt; }
+        if root.encrypt: VerticalLayout {
+            spacing: 6px;
+            BridgedLineEdit { placeholder-text: "Password"; input-type: InputType.password; text <=> root.password; accessible-label: "Password"; }
+            BridgedLineEdit { placeholder-text: "Verify password"; input-type: InputType.password; text <=> root.password2; accessible-label: "Verify password"; }
+        }
+        if root.error != "": Text { text: root.error; color: Theme.error; wrap: word-wrap; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            PlainButton { text: "Cancel"; clicked => { root.cancel(); } }
+            PlainButton { text: "Export…"; primary: true; clicked => { root.confirm(); } }
         }
     }
 }

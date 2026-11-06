@@ -123,9 +123,10 @@ impl DocWindow {
                 0 => st.pad.push(vec![Point::new(x, y)]),
                 1 => {
                     if let Some(s) = st.pad.last_mut()
-                        && s.last().is_none_or(|q| q.distance(Point::new(x, y)) >= 0.8) {
-                            s.push(Point::new(x, y));
-                        }
+                        && s.last().is_none_or(|q| q.distance(Point::new(x, y)) >= 0.8)
+                    {
+                        s.push(Point::new(x, y));
+                    }
                 }
                 _ => {}
             }

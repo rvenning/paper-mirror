@@ -36,6 +36,12 @@ export component ThumbnailList inherits Rectangle {
     callback item-clicked(index: int, ctrl: bool, shift: bool);
     callback item-context(index: int, x: length, y: length);
     callback key(event: KeyEvent) -> bool;
+    // Dragging thumbnails to reorder pages; y is in list content coordinates.
+    callback item-drag(index: int, y: length);
+    callback item-drop();
+    callback context-command(id: string);
+    in property <bool> drop-visible;
+    in property <length> drop-y;
 
     accessible-role: list;
     accessible-label: "Page thumbnails";
@@ -105,11 +111,39 @@ export component ThumbnailList inherits Rectangle {
                         root.item-clicked(t.index, e.modifiers.control, e.modifiers.shift);
                         focus.focus();
                     }
-                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
-                        root.item-context(t.index, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    if e.kind == PointerEventKind.up && e.button == PointerEventButton.left {
+                        root.item-drop();
                     }
                 }
+                moved => {
+                    if self.pressed { root.item-drag(t.index, t.y + self.mouse-y); }
+                }
             }
+        }
+
+        if root.drop-visible: Rectangle {
+            x: 8px;
+            y: root.drop-y;
+            width: parent.width - 16px;
+            height: 3px;
+            border-radius: 1.5px;
+            background: Theme.accent;
+            accessible-role: none;
+        }
+    }
+
+    // Right-clicks only; everything else falls through to the thumbnails.
+    ContextMenuArea {
+        width: root.width;
+        height: root.height;
+        Menu {
+            MenuItem { title: "Rotate Left"; activated => { root.context-command("rotate-left"); } }
+            MenuItem { title: "Rotate Right"; activated => { root.context-command("rotate-right"); } }
+            MenuSeparator { }
+            MenuItem { title: "Insert Blank Page"; activated => { root.context-command("insert-blank"); } }
+            MenuItem { title: "Insert Pages from File…"; activated => { root.context-command("insert-file"); } }
+            MenuSeparator { }
+            MenuItem { title: "Delete"; activated => { root.context-command("delete-pages"); } }
         }
     }
 
