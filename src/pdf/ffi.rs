@@ -42,13 +42,13 @@ fn library_candidates() -> Vec<PathBuf> {
     if let Some(p) = std::env::var_os("PAPER_MIRROR_PDFIUM") {
         v.push(PathBuf::from(p));
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            v.push(dir.join("pdfium.dll"));
-            // Test executables live in target/<profile>/deps.
-            if let Some(parent) = dir.parent() {
-                v.push(parent.join("pdfium.dll"));
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        v.push(dir.join("pdfium.dll"));
+        // Test executables live in target/<profile>/deps.
+        if let Some(parent) = dir.parent() {
+            v.push(parent.join("pdfium.dll"));
         }
     }
     v.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("third_party/pdfium/bin/pdfium.dll"));
@@ -91,7 +91,7 @@ pub fn b() -> &'static dyn PdfiumLibraryBindings {
 
 /// Decodes a UTF-16LE buffer as returned by PDFium (with trailing NUL).
 pub fn utf16_bytes_to_string(buf: &[u8]) -> String {
-    let units: Vec<u16> = buf.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+    let units: Vec<u16> = buf.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     let end = units.iter().position(|u| *u == 0).unwrap_or(units.len());
     String::from_utf16_lossy(&units[..end])
 }
@@ -232,11 +232,7 @@ impl Doc {
     pub fn page_size(&self, index: usize) -> (f32, f32) {
         let mut s = FS_SIZEF { width: 0.0, height: 0.0 };
         let ok = unsafe { b().FPDF_GetPageSizeByIndexF(self.handle, index as c_int, &mut s) };
-        if ok == 0 || !(s.width > 0.0 && s.height > 0.0) {
-            (612.0, 792.0)
-        } else {
-            (s.width, s.height)
-        }
+        if ok == 0 || !(s.width > 0.0 && s.height > 0.0) { (612.0, 792.0) } else { (s.width, s.height) }
     }
 
     pub fn page(&self, index: usize) -> Option<Page> {
@@ -258,7 +254,7 @@ impl Doc {
     }
 
     pub fn permissions(&self) -> u32 {
-        unsafe { b().FPDF_GetDocPermissions(self.handle) as u32 }
+        unsafe { b().FPDF_GetDocPermissions(self.handle) }
     }
 
     /// Serialises the whole document (a full rewrite, never incremental).
@@ -382,7 +378,9 @@ pub struct Bitmap {
 
 impl Bitmap {
     pub fn new(width: u32, height: u32) -> Option<Bitmap> {
-        let h = unsafe { b().FPDFBitmap_CreateEx(width as c_int, height as c_int, FPDFBITMAP_BGRA, std::ptr::null_mut(), 0) };
+        let h = unsafe {
+            b().FPDFBitmap_CreateEx(width as c_int, height as c_int, FPDFBITMAP_BGRA, std::ptr::null_mut(), 0)
+        };
         (!h.is_null()).then_some(Bitmap { handle: h, width, height })
     }
 

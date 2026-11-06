@@ -5,18 +5,24 @@ import { Icons } from "icons.slint";
 import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip } from "controls.slint";
 import { Canvas, PageItem } from "canvas.slint";
 import { ThumbnailList, ThumbItem, RowList, ListRow } from "sidebar.slint";
+import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
 
-export { Theme, PageItem, ThumbItem, ListRow }
+export { Theme, PageItem, ThumbItem, ListRow, ShortcutRow }
 
 export component MainWindow inherits Window {
     // Document state
     in property <string> doc-title: "Paper Mirror";
     in property <string> doc-subtitle;
     in property <bool> has-document;
+    in property <bool> has-file;
     in property <bool> edited;
+    in property <bool> multi-page;
     in property <string> zoom-label;
-    in property <string> status-text;
     in property <string> app-version;
+    in property <string> display-mode: "continuous";
+    in property <[string]> recent-files;
+    in property <[string]> window-titles;
+    in property <int> window-index;
 
     // Canvas
     in property <[PageItem]> pages;
@@ -36,13 +42,29 @@ export component MainWindow inherits Window {
     out property <length> thumbs-view-height: thumbs.view-height;
     out property <length> thumbs-view-width: thumbs.view-width;
 
+    // Modal prompt (password, Go to Page)
+    in-out property <string> prompt-kind;
+    in property <string> prompt-heading;
+    in property <string> prompt-message;
+    in property <string> prompt-error;
+    in property <bool> prompt-password;
+    in property <string> prompt-accept-label: "OK";
+    in-out property <string> prompt-value;
+    in-out property <bool> shortcuts-visible;
+    in property <[ShortcutRow]> shortcut-rows;
+
     callback command(id: string);
+    callback open-recent(index: int);
+    callback activate-window(index: int);
+    callback prompt-accepted(kind: string, value: string);
+    callback prompt-cancelled(kind: string);
     callback canvas-viewport-changed();
     callback canvas-ctrl-wheel(delta: float, x: length, y: length);
     callback canvas-key(event: KeyEvent) -> bool;
     callback thumbs-viewport-changed();
     callback thumb-clicked(index: int, ctrl: bool, shift: bool);
     callback thumbs-key(event: KeyEvent) -> bool;
+    callback sidebar-resized();
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
@@ -55,23 +77,67 @@ export component MainWindow inherits Window {
     MenuBar {
         Menu {
             title: "File";
-            MenuItem { title: "Open…"; shortcut: @keys(Control + O); activated => { root.command("open"); } }
+            MenuItem { title: "Open…"; shortcut: @keys(Control + "o"); activated => { root.command("open"); } }
+            Menu {
+                title: "Open Recent";
+                for f[i] in root.recent-files: MenuItem { title: f; activated => { root.open-recent(i); } }
+                MenuSeparator { }
+                MenuItem { title: "Clear Menu"; enabled: root.recent-files.length > 0; activated => { root.command("clear-recent"); } }
+            }
             MenuSeparator { }
-            MenuItem { title: "Close Window"; shortcut: @keys(Control + W); activated => { root.command("close"); } }
+            MenuItem { title: "Show in File Explorer"; enabled: root.has-file; activated => { root.command("show-in-explorer"); } }
+            MenuSeparator { }
+            MenuItem { title: "Close Window"; shortcut: @keys(Control + "w"); activated => { root.command("close"); } }
         }
         Menu {
             title: "View";
-            MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + S); activated => { root.command("toggle-sidebar"); } }
+            MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + "s"); activated => { root.command("toggle-sidebar"); } }
+            MenuItem { title: "Thumbnails"; shortcut: @keys(Control + Alt + "2"); enabled: root.has-document; activated => { root.command("sidebar-thumbnails"); } }
+            MenuSeparator { }
+            MenuItem { title: "Continuous Scroll"; shortcut: @keys(Control + "1"); checkable: true; checked: root.display-mode == "continuous"; enabled: root.has-document; activated => { root.command("view-continuous"); } }
+            MenuItem { title: "Single Page"; shortcut: @keys(Control + "2"); checkable: true; checked: root.display-mode == "single"; enabled: root.has-document; activated => { root.command("view-single"); } }
+            MenuItem { title: "Two Pages"; shortcut: @keys(Control + "3"); checkable: true; checked: root.display-mode == "two-pages"; enabled: root.has-document; activated => { root.command("view-two-pages"); } }
             MenuSeparator { }
             MenuItem { title: "Actual Size"; shortcut: @keys(Control + "0"); enabled: root.has-document; activated => { root.command("zoom-actual"); } }
             MenuItem { title: "Zoom to Fit"; shortcut: @keys(Control + "9"); enabled: root.has-document; activated => { root.command("zoom-fit-page"); } }
             MenuItem { title: "Zoom to Width"; enabled: root.has-document; activated => { root.command("zoom-fit-width"); } }
             MenuItem { title: "Zoom In"; shortcut: @keys(Control + "="); enabled: root.has-document; activated => { root.command("zoom-in"); } }
             MenuItem { title: "Zoom Out"; shortcut: @keys(Control + "-"); enabled: root.has-document; activated => { root.command("zoom-out"); } }
+            MenuSeparator { }
+            Menu {
+                title: "Appearance";
+                MenuItem { title: "Use System Setting"; checkable: true; checked: Theme.appearance == "system"; activated => { root.command("appearance-system"); } }
+                MenuItem { title: "Light"; checkable: true; checked: Theme.appearance == "light"; activated => { root.command("appearance-light"); } }
+                MenuItem { title: "Dark"; checkable: true; checked: Theme.appearance == "dark"; activated => { root.command("appearance-dark"); } }
+            }
+        }
+        Menu {
+            title: "Go";
+            MenuItem { title: "Previous Page"; shortcut: @keys(Control + Alt + UpArrow); enabled: root.has-document; activated => { root.command("page-prev"); } }
+            MenuItem { title: "Next Page"; shortcut: @keys(Control + Alt + DownArrow); enabled: root.has-document; activated => { root.command("page-next"); } }
+            MenuItem { title: "First Page"; shortcut: @keys(Home); enabled: root.has-document; activated => { root.command("page-first"); } }
+            MenuItem { title: "Last Page"; shortcut: @keys(End); enabled: root.has-document; activated => { root.command("page-last"); } }
+            MenuSeparator { }
+            MenuItem { title: "Go to Page…"; shortcut: @keys(Control + Alt + "g"); enabled: root.has-document && root.multi-page; activated => { root.command("go-to-page"); } }
+        }
+        Menu {
+            title: "Window";
+            MenuItem { title: "Minimize"; activated => { root.command("minimize"); } }
+            MenuItem { title: "Zoom"; activated => { root.command("maximize"); } }
+            MenuSeparator { }
+            for t[i] in root.window-titles: MenuItem {
+                title: t;
+                checkable: true;
+                checked: i == root.window-index;
+                activated => { root.activate-window(i); }
+            }
         }
         Menu {
             title: "Help";
-            MenuItem { title: "About Paper Mirror"; activated => { about.show(); } }
+            MenuItem { title: "Keyboard Shortcuts"; shortcut: @keys(F1); activated => { root.command("shortcuts"); } }
+            MenuItem { title: "Third-party Notices"; activated => { root.command("show-notices"); } }
+            MenuSeparator { }
+            MenuItem { title: "About Paper Mirror"; activated => { root.command("about"); } }
         }
     }
 
@@ -91,7 +157,7 @@ export component MainWindow inherits Window {
                     alignment: center;
                     IconButton {
                         icon: Icons.sidebar;
-                        tip: "Show or hide the sidebar";
+                        tip: "Show or hide the sidebar (Ctrl+Alt+S)";
                         selected: root.sidebar-visible;
                         clicked => { root.command("toggle-sidebar"); }
                     }
@@ -100,12 +166,14 @@ export component MainWindow inherits Window {
                     alignment: center;
                     padding-left: 6px;
                     min-width: 120px;
+                    horizontal-stretch: 1;
                     Text {
                         text: root.has-document ? root.doc-title : "Paper Mirror";
                         font-weight: 600;
                         font-size: Theme.font-title;
                         color: Theme.text;
                         overflow: elide;
+                        accessible-role: text;
                     }
                     if root.doc-subtitle != "": Text {
                         text: root.doc-subtitle;
@@ -114,14 +182,13 @@ export component MainWindow inherits Window {
                         overflow: elide;
                     }
                 }
-                Rectangle { horizontal-stretch: 1; }
                 VerticalLayout {
                     alignment: center;
                     Segmented {
                         left-icon: Icons.zoom-out;
                         right-icon: Icons.zoom-in;
-                        left-tip: "Zoom out";
-                        right-tip: "Zoom in";
+                        left-tip: "Zoom out (Ctrl+-)";
+                        right-tip: "Zoom in (Ctrl+=)";
                         enabled: root.has-document;
                         left-clicked => { root.command("zoom-out"); }
                         right-clicked => { root.command("zoom-in"); }
@@ -151,6 +218,7 @@ export component MainWindow inherits Window {
             if root.sidebar-visible: Rectangle {
                 width: 1px;
                 background: Theme.separator;
+                accessible-role: none;
                 TouchArea {
                     x: -3px;
                     width: 7px;
@@ -159,6 +227,9 @@ export component MainWindow inherits Window {
                         if self.pressed {
                             root.sidebar-width = clamp(root.sidebar-width + self.mouse-x - self.pressed-x, Theme.sidebar-min, Theme.sidebar-max);
                         }
+                    }
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.up { root.sidebar-resized(); }
                     }
                 }
             }
@@ -174,6 +245,29 @@ export component MainWindow inherits Window {
                 key(e) => { return root.canvas-key(e); }
             }
         }
+    }
+
+    if root.prompt-kind != "" || root.shortcuts-visible: Scrim { }
+
+    if root.prompt-kind != "": PromptPanel {
+        x: (root.width - self.width) / 2;
+        y: max(40px, (root.height - self.height) / 3);
+        heading: root.prompt-heading;
+        message: root.prompt-message;
+        error: root.prompt-error;
+        password: root.prompt-password;
+        accept-label: root.prompt-accept-label;
+        value <=> root.prompt-value;
+        accepted(v) => { root.prompt-accepted(root.prompt-kind, v); }
+        cancelled => { root.prompt-cancelled(root.prompt-kind); }
+        init => { self.focus-input(); }
+    }
+
+    if root.shortcuts-visible: ShortcutsPanel {
+        x: (root.width - self.width) / 2;
+        y: max(20px, (root.height - self.height) / 2);
+        rows: root.shortcut-rows;
+        closed => { root.shortcuts-visible = false; root.focus-canvas(); }
     }
 
     // Tooltip overlay, drawn last so it sits above every panel.
@@ -195,9 +289,9 @@ export component MainWindow inherits Window {
 
     about := PopupWindow {
         x: (root.width - 360px) / 2;
-        y: (root.height - 300px) / 2;
+        y: (root.height - 320px) / 2;
         width: 360px;
-        height: 300px;
+        height: 320px;
         close-policy: close-on-click-outside;
         Rectangle {
             background: Theme.panel-bg;
@@ -210,7 +304,7 @@ export component MainWindow inherits Window {
                 Text { text: "Paper Mirror"; font-size: 18px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
                 Text { text: "Version " + root.app-version; color: Theme.text-secondary; horizontal-alignment: center; }
                 Text {
-                    text: "A lightweight PDF and image viewer for Windows, inspired by macOS Preview. Not affiliated with Apple.";
+                    text: "A lightweight PDF and image viewer for Windows, inspired by macOS Preview. Not affiliated with or endorsed by Apple.";
                     wrap: word-wrap;
                     color: Theme.text;
                     horizontal-alignment: center;

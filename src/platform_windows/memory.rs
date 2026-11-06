@@ -16,7 +16,8 @@ pub struct MemoryUsage {
 pub fn process_memory() -> MemoryUsage {
     let mut c: PROCESS_MEMORY_COUNTERS_EX = unsafe { std::mem::zeroed() };
     c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
-    let ok = unsafe { GetProcessMemoryInfo(GetCurrentProcess(), (&mut c as *mut PROCESS_MEMORY_COUNTERS_EX).cast(), c.cb) };
+    let ok =
+        unsafe { GetProcessMemoryInfo(GetCurrentProcess(), (&mut c as *mut PROCESS_MEMORY_COUNTERS_EX).cast(), c.cb) };
     if ok == 0 {
         return MemoryUsage::default();
     }

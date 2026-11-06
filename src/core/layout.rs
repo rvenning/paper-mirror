@@ -25,18 +25,13 @@ pub enum DisplayMode {
     TwoPages,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum ZoomMode {
     /// Explicit zoom factor where 1.0 is Actual Size.
     Custom(f32),
+    #[default]
     FitWidth,
     FitPage,
-}
-
-impl Default for ZoomMode {
-    fn default() -> Self {
-        ZoomMode::FitWidth
-    }
 }
 
 pub fn clamp_zoom(z: f32) -> f32 {
@@ -44,9 +39,8 @@ pub fn clamp_zoom(z: f32) -> f32 {
 }
 
 /// Preset zoom steps used by Zoom In / Zoom Out.
-const ZOOM_STEPS: &[f32] = &[
-    0.08, 0.12, 0.25, 0.33, 0.5, 0.67, 0.75, 0.85, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0,
-];
+const ZOOM_STEPS: &[f32] =
+    &[0.08, 0.12, 0.25, 0.33, 0.5, 0.67, 0.75, 0.85, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0];
 
 pub fn zoom_in_step(z: f32) -> f32 {
     ZOOM_STEPS.iter().copied().find(|s| *s > z * 1.001).unwrap_or(MAX_ZOOM)
@@ -71,7 +65,9 @@ pub struct Layout {
 /// Groups pages into display rows (one page, or a two-page spread).
 fn rows(page_count: usize, mode: DisplayMode) -> Vec<(usize, Option<usize>)> {
     match mode {
-        DisplayMode::TwoPages => (0..page_count).step_by(2).map(|i| (i, (i + 1 < page_count).then_some(i + 1))).collect(),
+        DisplayMode::TwoPages => {
+            (0..page_count).step_by(2).map(|i| (i, (i + 1 < page_count).then_some(i + 1))).collect()
+        }
         _ => (0..page_count).map(|i| (i, None)).collect(),
     }
 }
@@ -227,10 +223,7 @@ impl Layout {
     /// Maps a content point to `(page, point in page display space)`. Page display
     /// space is points with the origin at the top-left of the displayed page.
     pub fn page_at(&self, p: Point) -> Option<(usize, Point)> {
-        self.rects
-            .iter()
-            .position(|r| !r.is_empty() && r.contains(p))
-            .map(|i| (i, self.to_page(i, p)))
+        self.rects.iter().position(|r| !r.is_empty() && r.contains(p)).map(|i| (i, self.to_page(i, p)))
     }
 
     /// Nearest page for a point that may fall between pages (used for drags).
@@ -283,13 +276,15 @@ fn dist_to_rect(r: &Rect, p: Point) -> f32 {
 /// under `anchor` (a viewport-relative position) fixed on screen.
 pub fn anchored_scroll(old: &Layout, new: &Layout, old_scroll: Point, anchor: Point) -> Point {
     let content_pt = Point::new(old_scroll.x + anchor.x, old_scroll.y + anchor.y);
-    let target = match old.page_at(content_pt).or_else(|| old.nearest_page(content_pt).map(|i| (i, old.to_page(i, content_pt)))) {
-        Some((page, pp)) if page < new.rects.len() && !new.rects[page].is_empty() => new.to_view(page, pp),
-        _ => {
-            let f = new.scale / old.scale;
-            Point::new(content_pt.x * f, content_pt.y * f)
-        }
-    };
+    let target =
+        match old.page_at(content_pt).or_else(|| old.nearest_page(content_pt).map(|i| (i, old.to_page(i, content_pt))))
+        {
+            Some((page, pp)) if page < new.rects.len() && !new.rects[page].is_empty() => new.to_view(page, pp),
+            _ => {
+                let f = new.scale / old.scale;
+                Point::new(content_pt.x * f, content_pt.y * f)
+            }
+        };
     Point::new((target.x - anchor.x).max(0.0), (target.y - anchor.y).max(0.0))
 }
 

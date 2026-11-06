@@ -127,7 +127,12 @@ impl Engine {
         self.next_doc.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub fn submit(&self, priority: Priority, generation: Option<Generation>, f: impl FnOnce(&mut EngineState) + Send + 'static) {
+    pub fn submit(
+        &self,
+        priority: Priority,
+        generation: Option<Generation>,
+        f: impl FnOnce(&mut EngineState) + Send + 'static,
+    ) {
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
         let _ = self.tx.send(Msg::Job(Job { priority, seq, generation, f: Box::new(f) }));
     }
@@ -174,15 +179,15 @@ fn run(rx: Receiver<Msg>) {
         if shutdown {
             break;
         }
-        if let Some(job) = queue.pop() {
-            if job.generation.as_ref().is_none_or(Generation::is_current) {
-                // A panic inside a job (e.g. a PDFium edge case surfacing as a Rust
-                // bounds error) must not take down the engine thread.
-                let f = job.f;
-                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut state)));
-                if r.is_err() {
-                    eprintln!("paper-mirror: a PDF engine job panicked; continuing");
-                }
+        if let Some(job) = queue.pop()
+            && job.generation.as_ref().is_none_or(Generation::is_current)
+        {
+            // A panic inside a job (e.g. a PDFium edge case surfacing as a Rust
+            // bounds error) must not take down the engine thread.
+            let f = job.f;
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&mut state)));
+            if r.is_err() {
+                eprintln!("paper-mirror: a PDF engine job panicked; continuing");
             }
         }
     }

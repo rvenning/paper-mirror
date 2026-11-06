@@ -36,9 +36,13 @@ lopdf = { version = "=0.47.0", default-features = false }
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Security_Cryptography",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
 ] }
+
+[dev-dependencies]
+i-slint-backend-testing = "=1.18.1"
 
 [build-dependencies]
 slint-build = "=1.18.1"

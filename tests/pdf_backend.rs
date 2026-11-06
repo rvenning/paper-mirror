@@ -25,8 +25,8 @@ fn renders_ink_onto_white() {
     let (w, h, px) = d.render_to_vec(0, 200).unwrap();
     assert_eq!(w, 200);
     assert_eq!(h, (792.0f32 * 200.0 / 612.0).round() as u32);
-    let dark = px.chunks_exact(4).filter(|p| p[0] < 128 && p[1] < 128 && p[2] < 128).count();
-    let white = px.chunks_exact(4).filter(|p| p[0] == 255 && p[1] == 255 && p[2] == 255).count();
+    let dark = px.as_chunks::<4>().0.iter().filter(|p| p[0] < 128 && p[1] < 128 && p[2] < 128).count();
+    let white = px.as_chunks::<4>().0.iter().filter(|p| p[0] == 255 && p[1] == 255 && p[2] == 255).count();
     assert!(dark > 50, "expected some text pixels, got {dark}");
     assert!(white > px.len() / 4 / 2, "page background should be white");
 }
@@ -116,4 +116,24 @@ fn metadata_is_readable() {
     assert_eq!(d.doc.meta("Title"), "Paper Mirror fixture");
     assert_eq!(d.doc.meta("Author"), "Paper Mirror tests");
     assert_eq!(d.doc.file_version(), Some(17));
+}
+
+#[test]
+fn password_protected_documents() {
+    let bytes = Arc::new(fixtures::encrypted_document("s3cret-ä"));
+    assert!(matches!(PdfDoc::open(Source::Memory(bytes.clone()), None), Err(OpenError::NeedsPassword)));
+    assert!(matches!(PdfDoc::open(Source::Memory(bytes.clone()), Some("nope")), Err(OpenError::WrongPassword)));
+    let d = PdfDoc::open(Source::Memory(bytes.clone()), Some("s3cret-ä")).expect("user password opens");
+    assert_eq!(d.page_count(), 3);
+    assert_eq!(d.doc.security_revision(), 6);
+    // The owner password opens it too.
+    assert!(PdfDoc::open(Source::Memory(bytes), Some("s3cret-ä-owner")).is_ok());
+}
+
+#[test]
+fn encrypted_bytes_do_not_contain_plain_text() {
+    let plain = fixtures::text_document();
+    assert!(plain.windows(10).any(|w| w == b"lighthouse"));
+    let enc = fixtures::encrypted_document("pw");
+    assert!(!enc.windows(10).any(|w| w == b"lighthouse"), "page content must be encrypted");
 }

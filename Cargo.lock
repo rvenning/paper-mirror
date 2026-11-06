@@ -3335,6 +3335,7 @@ dependencies = [
 name = "paper-mirror"
 version = "0.1.0"
 dependencies = [
+ "i-slint-backend-testing",
  "image",
  "lopdf",
  "pdfium-render",

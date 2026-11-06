@@ -1,0 +1,113 @@
+// In-window modal panels: text/password prompt and the keyboard-shortcut reference.
+import { LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { PlainButton } from "controls.slint";
+
+export struct ShortcutRow {
+    menu: string,
+    title: string,
+    keys: string,
+}
+
+// Dims the window and swallows clicks behind a modal panel.
+export component Scrim inherits Rectangle {
+    background: #00000055;
+    TouchArea { }
+}
+
+export component PromptPanel inherits Rectangle {
+    in property <string> heading;
+    in property <string> message;
+    in property <string> error;
+    in property <bool> password;
+    in property <string> accept-label: "OK";
+    in-out property <string> value;
+    callback accepted(value: string);
+    callback cancelled();
+
+    width: 380px;
+    height: layout.preferred-height;
+    background: Theme.panel-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.separator;
+    accessible-role: groupbox;
+    accessible-label: heading;
+
+    layout := VerticalLayout {
+        padding: 18px;
+        spacing: 10px;
+        Text { text: root.heading; font-size: 15px; font-weight: 600; color: Theme.text; wrap: word-wrap; }
+        if root.message != "": Text { text: root.message; color: Theme.text-secondary; wrap: word-wrap; }
+        input := LineEdit {
+            text <=> root.value;
+            input-type: root.password ? InputType.password : InputType.text;
+            accessible-label: root.heading;
+            accepted => { root.accepted(self.text); }
+            key-pressed(e) => {
+                if e.text == Key.Escape { root.cancelled(); return accept; }
+                reject
+            }
+        }
+        if root.error != "": Text { text: root.error; color: Theme.error; wrap: word-wrap; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            PlainButton { text: "Cancel"; clicked => { root.cancelled(); } }
+            PlainButton { text: root.accept-label; primary: true; clicked => { root.accepted(root.value); } }
+        }
+    }
+
+    public function focus-input() {
+        input.focus();
+        input.select-all();
+    }
+}
+
+export component ShortcutsPanel inherits Rectangle {
+    in property <[ShortcutRow]> rows;
+    callback closed();
+    width: 460px;
+    height: 520px;
+    background: Theme.panel-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.separator;
+    accessible-role: groupbox;
+    accessible-label: "Keyboard shortcuts";
+    VerticalLayout {
+        padding: 18px;
+        spacing: 10px;
+        Text { text: "Keyboard Shortcuts"; font-size: 15px; font-weight: 600; color: Theme.text; }
+        ScrollView {
+            VerticalLayout {
+                spacing: 2px;
+                alignment: start;
+                for r[i] in root.rows: Rectangle {
+                    height: 26px;
+                    background: mod(i, 2) == 0 ? Theme.control-hover : transparent;
+                    border-radius: 4px;
+                    accessible-role: list-item;
+                    accessible-label: r.title + ", " + r.keys;
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text { text: r.menu; width: 70px; color: Theme.text-secondary; vertical-alignment: center; }
+                        Text { text: r.title; color: Theme.text; vertical-alignment: center; overflow: elide; horizontal-stretch: 1; }
+                        Text { text: r.keys; color: Theme.text; font-weight: 600; vertical-alignment: center; horizontal-alignment: right; }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
+            PlainButton { text: "Close"; primary: true; clicked => { root.closed(); } }
+        }
+    }
+    FocusScope {
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.closed(); return accept; }
+            reject
+        }
+    }
+}

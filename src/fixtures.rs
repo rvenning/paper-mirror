@@ -61,7 +61,14 @@ impl Builder {
         self.page_with_content(w, h, rotate, ops, None)
     }
 
-    pub fn page_with_content(&mut self, w: f32, h: f32, rotate: i32, ops: Vec<Operation>, extra_resources: Option<Dictionary>) -> ObjectId {
+    pub fn page_with_content(
+        &mut self,
+        w: f32,
+        h: f32,
+        rotate: i32,
+        ops: Vec<Operation>,
+        extra_resources: Option<Dictionary>,
+    ) -> ObjectId {
         let content = Content { operations: ops };
         let content_id = self.doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
         let mut resources = dictionary! { "Font" => dictionary! { "F1" => self.font_id } };
@@ -224,10 +231,9 @@ pub fn outline_document() -> Vec<u8> {
         sec22,
         dictionary! { "Title" => Object::string_literal("Section 2.2"), "Parent" => ch2, "Prev" => sec21, "Dest" => dest(pages[4]) }.into(),
     );
-    b.doc.objects.insert(
-        outlines_id,
-        dictionary! { "Type" => "Outlines", "First" => ch1, "Last" => ch2, "Count" => 4 }.into(),
-    );
+    b.doc
+        .objects
+        .insert(outlines_id, dictionary! { "Type" => "Outlines", "First" => ch1, "Last" => ch2, "Count" => 4 }.into());
     to_bytes(b.finish(dictionary! { "Outlines" => outlines_id, "PageMode" => "UseOutlines" }))
 }
 
@@ -306,5 +312,18 @@ pub fn write_all(dir: &std::path::Path) -> std::io::Result<()> {
     std::fs::write(dir.join("malformed.pdf"), malformed_document())?;
     std::fs::write(dir.join("not-a-pdf.pdf"), not_a_pdf())?;
     std::fs::write(dir.join("pages-120.pdf"), many_pages(120))?;
+    std::fs::write(dir.join("encrypted-secret.pdf"), encrypted_document("secret"))?;
     Ok(())
+}
+
+/// The three-page text document protected with AES-256 and `password`.
+pub fn encrypted_document(password: &str) -> Vec<u8> {
+    let p = crate::pdf::security::Protection {
+        open_password: password.into(),
+        owner_password: format!("{password}-owner"),
+        allow_printing: true,
+        allow_copying: true,
+        allow_editing: true,
+    };
+    crate::pdf::security::encrypt(&text_document(), &p).expect("encrypt fixture")
 }

@@ -6,6 +6,7 @@ pub mod core;
 pub mod fixtures;
 pub mod pdf;
 pub mod platform_windows;
+pub mod storage;
 
 pub mod ui {
     slint::include_modules!();

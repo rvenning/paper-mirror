@@ -83,7 +83,15 @@ impl PdfDoc {
     /// Renders part of a page. `scale` is device pixels per point; `(ox, oy)` is the
     /// device-pixel offset of the target's top-left corner within the whole page at
     /// that scale, so a target smaller than the page renders a clipped tile.
-    pub fn render(&self, index: usize, scale: f32, ox: f32, oy: f32, target: RenderTarget<'_>, annotations: bool) -> bool {
+    pub fn render(
+        &self,
+        index: usize,
+        scale: f32,
+        ox: f32,
+        oy: f32,
+        target: RenderTarget<'_>,
+        annotations: bool,
+    ) -> bool {
         let RenderTarget { pixels, width, height } = target;
         if width == 0 || height == 0 || pixels.len() < (width * height * 4) as usize {
             return false;
