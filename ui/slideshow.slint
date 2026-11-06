@@ -1,0 +1,47 @@
+// Full-screen slideshow window.
+import { Theme } from "theme.slint";
+
+export component SlideshowWindow inherits Window {
+    in property <image> slide;
+    in property <bool> has-slide;
+    in property <string> caption;
+    in property <bool> caption-visible: true;
+    out property <length> view-width: self.width;
+    out property <length> view-height: self.height;
+    callback key(event: KeyEvent) -> bool;
+    callback clicked(right: bool);
+    callback resized();
+
+    title: "Slideshow";
+    background: black;
+    no-frame: true;
+    changed width => { root.resized(); }
+    changed height => { root.resized(); }
+
+    if root.has-slide: Image {
+        source: root.slide;
+        width: parent.width;
+        height: parent.height;
+        image-fit: contain;
+        accessible-role: image;
+        accessible-label: root.caption;
+    }
+    if root.caption-visible: Rectangle {
+        y: parent.height - 44px;
+        x: (parent.width - self.width) / 2;
+        width: cap.preferred-width + 24px;
+        height: 28px;
+        border-radius: 14px;
+        background: #000000a0;
+        cap := Text { text: root.caption; color: #e6e6e6; font-size: 13px; }
+    }
+    TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.up { root.clicked(e.button == PointerEventButton.right); }
+        }
+    }
+    fs := FocusScope {
+        key-pressed(e) => { root.key(e) ? accept : reject }
+    }
+    init => { fs.focus(); }
+}

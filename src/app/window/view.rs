@@ -80,6 +80,10 @@ impl DocWindow {
         if !has_doc {
             return;
         }
+        if self.ui.get_contact_sheet() {
+            self.update_sheet();
+            return;
+        }
         let resized = (vp.w - last.w).abs() > 0.5 || (vp.h - last.h).abs() > 0.5;
         if resized && (fit || last.w == 0.0) {
             self.relayout(None);
@@ -98,7 +102,8 @@ impl DocWindow {
         let scale_factor = sf(self);
         let mut to_render: Vec<(usize, u32, u32, f32)> = Vec::new();
         let mut items = Vec::new();
-        let (doc_id, subtitle, current);
+        let (doc_id, subtitle, current, overlays, page_changed, bookmarked);
+        let visible_pages: Vec<usize>;
         {
             let mut st = self.st.borrow_mut();
             let Some(doc) = st.doc.as_ref() else { return };
@@ -110,7 +115,11 @@ impl DocWindow {
             } else {
                 st.layout.current_page(scroll.y, vp.h)
             };
+            page_changed = st.list_page != Some(current);
+            st.list_page = Some(current);
             st.current_page = current;
+            bookmarked = st.bookmarks.contains(&current);
+            visible_pages = visible.clone();
             subtitle = format!("Page {} of {}", current + 1, n);
             let view_rect = Rect::new(scroll.x, scroll.y, vp.w, vp.h);
             for i in visible {
@@ -151,9 +160,17 @@ impl DocWindow {
             if st.selected.len() <= 1 {
                 st.selected = vec![current];
             }
+            overlays = super::tools::build_overlays(&st, &visible_pages);
         }
         self.ui.set_doc_subtitle(subtitle.into());
+        self.ui.set_page_bookmarked(bookmarked);
         self.pages_model.set_vec(items);
+        self.overlays_model.set_vec(overlays);
+        self.ensure_links(&visible_pages);
+        if page_changed {
+            self.refresh_outline_rows();
+            self.refresh_bookmark_rows();
+        }
         let generation = self.render_gen.current();
         for (page, w, h, scale) in to_render {
             self.request_page(doc_id, page, w, h, scale, generation.clone());
@@ -336,6 +353,7 @@ impl DocWindow {
             }
             self.ui.set_thumbs_content_height(y + 8.0);
             let selected = st.selected.clone();
+            let bookmarks = st.bookmarks.clone();
             for (i, r) in rects.iter().enumerate() {
                 if r.bottom() + THUMB_LABEL_H < top - 200.0 || r.y > bottom + 200.0 {
                     continue;
@@ -348,6 +366,7 @@ impl DocWindow {
                     height: r.h,
                     label: (i + 1).to_string().into(),
                     selected: selected.contains(&i),
+                    bookmarked: bookmarks.contains(&i),
                     ..Default::default()
                 };
                 if let Some(img) = st.thumb_cache.as_mut().unwrap().get(&i) {
@@ -506,6 +525,8 @@ impl DocWindow {
             self.go_to_page(0);
         } else if is(Key::End) {
             self.go_to_page(usize::MAX);
+        } else if is(Key::Escape) {
+            return self.escape();
         } else {
             return false;
         }

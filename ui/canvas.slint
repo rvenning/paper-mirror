@@ -1,5 +1,6 @@
 // The document canvas: a virtualised page surface. Rust computes which pages are in
-// view and where they sit; this file only draws what it is given.
+// view and where they sit; this file only draws what it is given and reports pointer
+// input back in content coordinates.
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
@@ -21,8 +22,31 @@ export struct PageItem {
     label: string,
 }
 
+// kind: 0 search match, 1 current search match, 2 text selection, 3 rectangular
+// selection, 4 drag insertion marker.
+export struct OverlayRect {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    kind: int,
+}
+
+export struct SheetItem {
+    index: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    image: image,
+    has-image: bool,
+    label: string,
+    selected: bool,
+}
+
 export component Canvas inherits Rectangle {
     in property <[PageItem]> pages;
+    in property <[OverlayRect]> overlays;
     in property <length> content-width;
     in property <length> content-height;
     out property <length> scroll-x: -flick.content-x;
@@ -30,12 +54,22 @@ export component Canvas inherits Rectangle {
     in property <string> empty-title;
     in property <string> empty-detail;
     in property <bool> has-document;
+    // "default", "pointer", "text", "crosshair", "move", "grab" or "grabbing".
+    in property <string> cursor: "default";
+    in property <bool> loupe-visible;
+    in property <image> loupe-image;
+    in property <length> loupe-x;
+    in property <length> loupe-y;
+    in property <length> loupe-size: 220px;
     out property <length> view-width: flick.visible-width;
     out property <length> view-height: flick.visible-height;
+    out property <bool> hovered: wheel.has-hover;
 
     callback viewport-changed();
     callback ctrl-wheel(delta: float, x: length, y: length);
     callback key(event: KeyEvent) -> bool;
+    // kind: 0 down, 1 move, 2 up, 3 cancel, 4 double-click. button: 0 left, 1 right.
+    callback pointer(kind: int, x: length, y: length, shift: bool, ctrl: bool, button: int);
 
     background: Theme.canvas-bg;
     accessible-role: groupbox;
@@ -50,19 +84,6 @@ export component Canvas inherits Rectangle {
         // Flickable offsets are negative; scroll-x/scroll-y expose positive offsets.
         changed content-x => { root.viewport-changed(); }
         changed content-y => { root.viewport-changed(); }
-
-        wheel := TouchArea {
-            width: max(root.content-width, flick.visible-width);
-            height: max(root.content-height, flick.visible-height);
-            scroll-event(e) => {
-                if e.modifiers.control {
-                    root.ctrl-wheel(e.delta-y / 1px, self.mouse-x - root.scroll-x, self.mouse-y - root.scroll-y);
-                    return accept;
-                }
-                reject
-            }
-            clicked => { focus.focus(); }
-        }
 
         for p in root.pages: Rectangle {
             x: p.x;
@@ -89,6 +110,61 @@ export component Canvas inherits Rectangle {
                 source: p.tile;
                 image-fit: fill;
             }
+        }
+
+        for o in root.overlays: Rectangle {
+            x: o.x;
+            y: o.y;
+            width: o.width;
+            height: o.height;
+            background: o.kind == 0 ? Theme.search-match : o.kind == 1 ? Theme.search-current : o.kind == 2 ? Theme.selection : o.kind == 3 ? Theme.selection.with-alpha(0.12) : Theme.accent;
+            border-width: o.kind == 3 ? 1px : 0px;
+            border-color: Theme.accent;
+        }
+
+        wheel := TouchArea {
+            width: max(root.content-width, flick.visible-width);
+            height: max(root.content-height, flick.visible-height);
+            mouse-cursor: root.cursor == "pointer" ? MouseCursor.pointer : root.cursor == "text" ? MouseCursor.text : root.cursor == "crosshair" ? MouseCursor.crosshair : root.cursor == "move" ? MouseCursor.move : root.cursor == "grab" ? MouseCursor.grab : root.cursor == "grabbing" ? MouseCursor.grabbing : MouseCursor.default;
+            scroll-event(e) => {
+                if e.modifiers.control {
+                    root.ctrl-wheel(e.delta-y / 1px, self.mouse-x - root.scroll-x, self.mouse-y - root.scroll-y);
+                    return accept;
+                }
+                reject
+            }
+            pointer-event(e) => {
+                if e.button == PointerEventButton.middle { return; }
+                if e.kind == PointerEventKind.down { focus.focus(); }
+                root.pointer(
+                    e.kind == PointerEventKind.down ? 0 : e.kind == PointerEventKind.move ? 1 : e.kind == PointerEventKind.up ? 2 : 3,
+                    self.mouse-x, self.mouse-y, e.modifiers.shift, e.modifiers.control,
+                    e.button == PointerEventButton.right ? 1 : 0);
+            }
+            double-clicked => {
+                root.pointer(4, self.mouse-x, self.mouse-y, false, false, 0);
+            }
+        }
+    }
+
+    if root.loupe-visible: Rectangle {
+        x: root.loupe-x - root.loupe-size / 2;
+        y: root.loupe-y - root.loupe-size / 2;
+        width: root.loupe-size;
+        height: root.loupe-size;
+        border-radius: root.loupe-size / 2;
+        clip: true;
+        background: white;
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: root.loupe-image;
+            image-fit: fill;
+        }
+        Rectangle {
+            border-radius: root.loupe-size / 2;
+            border-width: 3px;
+            border-color: Theme.dark ? #c8c8c8 : #555555;
         }
     }
 
@@ -121,5 +197,68 @@ export component Canvas inherits Rectangle {
 
     public function focus-canvas() {
         focus.focus();
+    }
+}
+
+// Contact sheet: a grid of large thumbnails replacing the canvas.
+export component ContactSheet inherits Rectangle {
+    in property <[SheetItem]> items;
+    in property <length> content-height;
+    out property <length> scroll-y: -scroll.content-y;
+    out property <length> view-width: scroll.visible-width;
+    out property <length> view-height: scroll.visible-height;
+    callback viewport-changed();
+    callback item-clicked(index: int);
+    callback item-opened(index: int);
+    background: Theme.canvas-bg;
+    accessible-role: list;
+    accessible-label: "Contact sheet";
+    changed width => { root.viewport-changed(); }
+    changed height => { root.viewport-changed(); }
+    scroll := ScrollView {
+        content-height: root.content-height;
+        content-width: self.visible-width;
+        changed content-y => { root.viewport-changed(); }
+        for t in root.items: Rectangle {
+            x: t.x;
+            y: t.y;
+            width: t.width + 16px;
+            height: t.height + 34px;
+            accessible-role: list-item;
+            accessible-label: t.label;
+            accessible-item-selectable: true;
+            accessible-item-selected: t.selected;
+            accessible-action-default => { root.item-opened(t.index); }
+            Rectangle {
+                width: t.width + 12px;
+                height: t.height + 12px;
+                x: 2px;
+                y: 2px;
+                border-radius: 6px;
+                background: t.selected ? Theme.control-selected : transparent;
+            }
+            Rectangle {
+                x: 8px;
+                y: 8px;
+                width: t.width;
+                height: t.height;
+                background: white;
+                border-width: 1px;
+                border-color: Theme.page-border;
+                if t.has-image: Image { source: t.image; width: parent.width; height: parent.height; image-fit: fill; }
+            }
+            Text {
+                y: t.height + 16px;
+                width: parent.width;
+                text: t.label;
+                horizontal-alignment: center;
+                font-size: Theme.font-small;
+                color: Theme.text-secondary;
+            }
+            TouchArea {
+                clicked => { root.item-clicked(t.index); }
+                double-clicked => { root.item-opened(t.index); }
+            }
+        }
     }
 }

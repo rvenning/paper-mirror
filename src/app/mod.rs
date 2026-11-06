@@ -27,6 +27,10 @@ pub struct Options {
     pub renderer: Option<String>,
     /// Write a PNG of the window after the first page renders, then quit.
     pub snapshot: Option<PathBuf>,
+    /// Diagnostics: search for this text once the first document opens.
+    pub search: Option<String>,
+    /// Diagnostics: commands to run once the first document opens.
+    pub commands: Vec<String>,
 }
 
 pub fn parse_args(args: &[String]) -> Options {
@@ -41,6 +45,8 @@ pub fn parse_args(args: &[String]) -> Options {
                 o.snapshot = Some(PathBuf::from(&s["--snapshot=".len()..]));
                 o.exit_after_render = true;
             }
+            s if s.starts_with("--search=") => o.search = Some(s["--search=".len()..].to_string()),
+            s if s.starts_with("--command=") => o.commands.push(s["--command=".len()..].to_string()),
             s if s.starts_with("--") => {}
             s => o.files.push(PathBuf::from(s)),
         }

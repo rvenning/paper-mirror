@@ -64,6 +64,8 @@ impl DocWindow {
 
     /// Detects the file type and opens it with the matching backend.
     pub fn open_path(&self, path: PathBuf) {
+        // Absolute paths keep Open Recent, bookmarks and the Inspector unambiguous.
+        let path = std::path::absolute(&path).unwrap_or(path);
         let kind = match filetype::detect_path(&path) {
             Ok(k) => k,
             Err(e) => {
@@ -154,8 +156,22 @@ impl DocWindow {
         self.ui.set_multi_page(sizes.len() > 1);
         super::super::update_settings(|s| s.add_recent(&path));
         super::super::refresh_window_menus();
+        self.ui.set_sidebar_mode("thumbnails".into());
+        self.load_outline(id);
+        self.load_bookmarks();
+        if self.ui.get_inspector_visible() {
+            self.refresh_inspector();
+        }
         self.relayout(None);
         self.ui.invoke_focus_canvas();
+        let opts = super::super::context().options;
+        if let Some(q) = opts.search.as_deref() {
+            self.ui.set_search_text(q.into());
+            self.start_search(q);
+        }
+        for c in &opts.commands {
+            self.command(c);
+        }
         self.ui.window().request_redraw();
     }
 }

@@ -26,3 +26,49 @@ pub fn show_notices() {
         }
     }
 }
+
+/// Only web and e-mail links may be handed to the shell from document content;
+/// `file:`, `javascript:` and custom protocol handlers are refused.
+pub fn is_safe_url(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    (lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:"))
+        && !url.chars().any(|c| c.is_control())
+}
+
+/// Opens a URL with the user's default handler.
+pub fn open_url(url: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    if !is_safe_url(url) {
+        return;
+    }
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
+    let target: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_url;
+
+    #[test]
+    fn url_allow_list() {
+        assert!(is_safe_url("https://example.com/a?b=c"));
+        assert!(is_safe_url("HTTP://EXAMPLE.COM"));
+        assert!(is_safe_url("mailto:someone@example.com"));
+        assert!(!is_safe_url("file:///C:/Windows/system32/calc.exe"));
+        assert!(!is_safe_url("javascript:alert(1)"));
+        assert!(!is_safe_url("ms-settings:"));
+        assert!(!is_safe_url(r"\\server\share\x.exe"));
+        assert!(!is_safe_url("https://example.com/\u{0}x"));
+    }
+}

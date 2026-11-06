@@ -24,26 +24,42 @@ pub const COMMANDS: &[CommandInfo] = &[
     c("clear-recent", "File", "Clear Menu", None),
     c("close", "File", "Close Window", Some("Ctrl+W")),
     c("show-in-explorer", "File", "Show in File Explorer", None),
+    // Edit
+    c("find", "Edit", "Find…", Some("Ctrl+F")),
+    c("find-next", "Edit", "Find Next", Some("Ctrl+G")),
+    c("find-prev", "Edit", "Find Previous", Some("Ctrl+Shift+G")),
     // View
-    c("toggle-sidebar", "View", "Show/Hide Sidebar", Some("Ctrl+Alt+S")),
+    c("content-only", "View", "Content Only", Some("Ctrl+Alt+1")),
     c("sidebar-thumbnails", "View", "Thumbnails", Some("Ctrl+Alt+2")),
+    c("sidebar-contents", "View", "Table of Contents", Some("Ctrl+Alt+3")),
+    c("sidebar-bookmarks", "View", "Bookmarks", Some("Ctrl+Alt+5")),
+    c("contact-sheet", "View", "Contact Sheet", Some("Ctrl+Alt+6")),
+    c("toggle-sidebar", "View", "Show/Hide Sidebar", Some("Ctrl+Alt+S")),
     c("view-continuous", "View", "Continuous Scroll", Some("Ctrl+1")),
     c("view-single", "View", "Single Page", Some("Ctrl+2")),
     c("view-two-pages", "View", "Two Pages", Some("Ctrl+3")),
     c("zoom-actual", "View", "Actual Size", Some("Ctrl+0")),
     c("zoom-fit-page", "View", "Zoom to Fit", Some("Ctrl+9")),
+    c("zoom-to-selection", "View", "Zoom to Selection", Some("Ctrl+8")),
     c("zoom-fit-width", "View", "Zoom to Width", None),
     c("zoom-in", "View", "Zoom In", Some("Ctrl+=")),
     c("zoom-out", "View", "Zoom Out", Some("Ctrl+-")),
+    c("slideshow", "View", "Slideshow", Some("Ctrl+Shift+F")),
     c("appearance-system", "View", "Appearance: Use System Setting", None),
     c("appearance-light", "View", "Appearance: Light", None),
     c("appearance-dark", "View", "Appearance: Dark", None),
     // Go
     c("page-prev", "Go", "Previous Page", Some("Ctrl+Alt+Up")),
     c("page-next", "Go", "Next Page", Some("Ctrl+Alt+Down")),
-    c("page-first", "Go", "First Page", Some("Home")),
-    c("page-last", "Go", "Last Page", Some("End")),
+    c("page-first", "Go", "First Page", None),
+    c("page-last", "Go", "Last Page", None),
     c("go-to-page", "Go", "Go to Page…", Some("Ctrl+Alt+G")),
+    c("toggle-bookmark", "Go", "Add/Remove Bookmark", Some("Ctrl+D")),
+    // Tools
+    c("tool-text", "Tools", "Text Selection", None),
+    c("tool-rect", "Tools", "Rectangular Selection", None),
+    c("toggle-loupe", "Tools", "Show Magnifier", Some("Ctrl+`")),
+    c("inspector", "Tools", "Show Inspector", Some("Ctrl+I")),
     // Window
     c("minimize", "Window", "Minimize", None),
     c("maximize", "Window", "Zoom", None),
@@ -57,9 +73,26 @@ pub fn find(id: &str) -> Option<&'static CommandInfo> {
     COMMANDS.iter().find(|c| c.id == id)
 }
 
+/// Keys handled directly by the document canvas or search field. They are not menu
+/// accelerators, so they never steal keystrokes from text fields.
+pub const CANVAS_KEYS: &[(&str, &str, &str)] = &[
+    ("Canvas", "First / last page", "Home / End"),
+    ("Canvas", "Scroll a screen", "Page Down / Page Up"),
+    ("Canvas", "Scroll a screen", "Space / Shift+Space"),
+    ("Canvas", "Previous / next page", "Left / Right"),
+    ("Canvas", "Scroll a little", "Up / Down"),
+    ("Canvas", "Clear selection", "Esc"),
+    ("Search", "Next / previous match", "F3 / Shift+F3"),
+    ("Search", "Clear search", "Esc"),
+];
+
 /// Rows for the keyboard-shortcut reference: (menu, title, shortcut).
 pub fn shortcut_rows() -> Vec<(&'static str, &'static str, &'static str)> {
-    COMMANDS.iter().filter_map(|c| c.shortcut.map(|s| (c.menu, c.title, s))).collect()
+    COMMANDS
+        .iter()
+        .filter_map(|c| c.shortcut.map(|s| (c.menu, c.title, s)))
+        .chain(CANVAS_KEYS.iter().copied())
+        .collect()
 }
 
 /// Converts a Slint `@keys(...)` body such as `Control + Shift + "A"` into the display

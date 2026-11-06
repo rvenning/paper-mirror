@@ -313,6 +313,7 @@ pub fn write_all(dir: &std::path::Path) -> std::io::Result<()> {
     std::fs::write(dir.join("not-a-pdf.pdf"), not_a_pdf())?;
     std::fs::write(dir.join("pages-120.pdf"), many_pages(120))?;
     std::fs::write(dir.join("encrypted-secret.pdf"), encrypted_document("secret"))?;
+    std::fs::write(dir.join("links.pdf"), links_document())?;
     Ok(())
 }
 
@@ -326,4 +327,25 @@ pub fn encrypted_document(password: &str) -> Vec<u8> {
         allow_editing: true,
     };
     crate::pdf::security::encrypt(&text_document(), &p).expect("encrypt fixture")
+}
+
+/// Three pages; page 1 links to page 3 and to an external URI.
+pub fn links_document() -> Vec<u8> {
+    let mut b = Builder::new();
+    let p1 = b.text_page(612.0, 792.0, 0, &["Links fixture", "Go to page three", "Visit example.com"]);
+    b.text_page(612.0, 792.0, 0, &["Page two"]);
+    let p3 = b.text_page(612.0, 792.0, 0, &["Page three target"]);
+    let internal = b.doc.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Link", "Rect" => vec![70.into(), 680.into(), 250.into(), 700.into()],
+        "Border" => vec![0.into(), 0.into(), 0.into()], "Dest" => vec![p3.into(), "Fit".into()],
+    });
+    let external = b.doc.add_object(dictionary! {
+        "Type" => "Annot", "Subtype" => "Link", "Rect" => vec![70.into(), 662.into(), 250.into(), 682.into()],
+        "Border" => vec![0.into(), 0.into(), 0.into()],
+        "A" => dictionary! { "S" => "URI", "URI" => Object::string_literal("https://example.com/") },
+    });
+    if let Ok(Object::Dictionary(p)) = b.doc.get_object_mut(p1) {
+        p.set("Annots", vec![internal.into(), external.into()]);
+    }
+    to_bytes(b.finish(dictionary! {}))
 }

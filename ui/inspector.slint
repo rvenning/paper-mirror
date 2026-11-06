@@ -1,0 +1,52 @@
+// Inspector: document / image information shown in a right-hand panel.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { IconButton } from "controls.slint";
+import { Icons } from "icons.slint";
+
+export struct InfoRow {
+    key: string,
+    value: string,
+    heading: bool,
+}
+
+export component InspectorPanel inherits Rectangle {
+    in property <[InfoRow]> rows;
+    in property <string> heading: "Info";
+    callback closed();
+    width: 290px;
+    background: Theme.panel-bg;
+    accessible-role: groupbox;
+    accessible-label: "Inspector";
+    Rectangle { x: 0; width: 1px; background: Theme.separator; }
+    VerticalLayout {
+        padding-left: 1px;
+        HorizontalLayout {
+            height: 36px;
+            padding-left: 12px;
+            padding-right: 4px;
+            Text { text: root.heading; font-weight: 600; color: Theme.text; vertical-alignment: center; horizontal-stretch: 1; }
+            VerticalLayout { alignment: center; IconButton { icon: Icons.close; tip: "Close the inspector"; clicked => { root.closed(); } } }
+        }
+        Rectangle { height: 1px; background: Theme.separator; }
+        ScrollView {
+            content-width: self.visible-width;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 6px;
+                alignment: start;
+                for r in root.rows: VerticalLayout {
+                    padding-top: r.heading ? 8px : 0px;
+                    accessible-role: text;
+                    accessible-label: r.key + ": " + r.value;
+                    if r.heading: Text { text: r.key; font-weight: 600; color: Theme.text; }
+                    if !r.heading: HorizontalLayout {
+                        spacing: 8px;
+                        Text { text: r.key; width: 96px; color: Theme.text-secondary; horizontal-alignment: right; wrap: word-wrap; }
+                        Text { text: r.value; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; }
+                    }
+                }
+            }
+        }
+    }
+}

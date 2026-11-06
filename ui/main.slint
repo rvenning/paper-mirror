@@ -1,13 +1,15 @@
 // Paper Mirror main document window.
-import { AboutSlint } from "std-widgets.slint";
+import { AboutSlint, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
 import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip } from "controls.slint";
-import { Canvas, PageItem } from "canvas.slint";
-import { ThumbnailList, ThumbItem, RowList, ListRow } from "sidebar.slint";
+import { Canvas, PageItem, OverlayRect, ContactSheet, SheetItem } from "canvas.slint";
+import { ThumbnailList, ThumbItem, RowList, ListRow, SidebarTabs } from "sidebar.slint";
 import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
+import { InspectorPanel, InfoRow } from "inspector.slint";
+import { SlideshowWindow } from "slideshow.slint";
 
-export { Theme, PageItem, ThumbItem, ListRow, ShortcutRow }
+export { Theme, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
 
 export component MainWindow inherits Window {
     // Document state
@@ -23,24 +25,51 @@ export component MainWindow inherits Window {
     in property <[string]> recent-files;
     in property <[string]> window-titles;
     in property <int> window-index;
+    in property <string> tool: "text";
+    in property <bool> loupe-on;
+    in property <bool> has-rect-selection;
+    in property <bool> page-bookmarked;
 
     // Canvas
     in property <[PageItem]> pages;
+    in property <[OverlayRect]> overlays;
     in property <length> content-width;
     in property <length> content-height;
+    in property <string> canvas-cursor: "default";
+    in property <bool> loupe-visible;
+    in property <image> loupe-image;
+    in property <length> loupe-x;
+    in property <length> loupe-y;
     out property <length> scroll-x: canvas.scroll-x;
     out property <length> scroll-y: canvas.scroll-y;
-    out property <length> view-width: canvas.view-width;
-    out property <length> view-height: canvas.view-height;
+    out property <length> view-width: contact-sheet ? sheet.view-width : canvas.view-width;
+    out property <length> view-height: contact-sheet ? sheet.view-height : canvas.view-height;
+
+    // Contact sheet
+    in-out property <bool> contact-sheet;
+    in property <[SheetItem]> sheet-items;
+    in property <length> sheet-content-height;
+    out property <length> sheet-scroll-y: sheet.scroll-y;
 
     // Sidebar
     in-out property <bool> sidebar-visible: true;
     in-out property <length> sidebar-width: 170px;
+    in-out property <string> sidebar-mode: "thumbnails";
     in property <[ThumbItem]> thumbs;
     in property <length> thumbs-content-height;
     out property <length> thumbs-scroll-y: thumbs.scroll-y;
     out property <length> thumbs-view-height: thumbs.view-height;
     out property <length> thumbs-view-width: thumbs.view-width;
+    in property <[ListRow]> outline-rows;
+    in property <[ListRow]> bookmark-rows;
+    in property <[ListRow]> search-rows;
+    in property <string> search-status;
+    in property <bool> has-search;
+    in-out property <string> search-text;
+
+    // Inspector
+    in-out property <bool> inspector-visible;
+    in property <[InfoRow]> info-rows;
 
     // Modal prompt (password, Go to Page)
     in-out property <string> prompt-kind;
@@ -61,15 +90,24 @@ export component MainWindow inherits Window {
     callback canvas-viewport-changed();
     callback canvas-ctrl-wheel(delta: float, x: length, y: length);
     callback canvas-key(event: KeyEvent) -> bool;
+    callback canvas-pointer(kind: int, x: length, y: length, shift: bool, ctrl: bool, button: int);
     callback thumbs-viewport-changed();
     callback thumb-clicked(index: int, ctrl: bool, shift: bool);
     callback thumbs-key(event: KeyEvent) -> bool;
     callback sidebar-resized();
+    callback sidebar-mode-selected(mode: string);
+    callback list-row-clicked(mode: string, id: int);
+    callback list-row-toggled(mode: string, id: int);
+    callback search-submitted(text: string);
+    callback search-edited(text: string);
+    callback sheet-viewport-changed();
+    callback sheet-item-clicked(index: int);
+    callback sheet-item-opened(index: int);
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
     preferred-height: 820px;
-    min-width: 520px;
+    min-width: 560px;
     min-height: 380px;
     background: Theme.window-bg;
     default-font-size: Theme.font-size;
@@ -90,9 +128,19 @@ export component MainWindow inherits Window {
             MenuItem { title: "Close Window"; shortcut: @keys(Control + "w"); activated => { root.command("close"); } }
         }
         Menu {
+            title: "Edit";
+            MenuItem { title: "Find…"; shortcut: @keys(Control + "f"); enabled: root.has-document; activated => { root.command("find"); } }
+            MenuItem { title: "Find Next"; shortcut: @keys(Control + "g"); enabled: root.has-search; activated => { root.command("find-next"); } }
+            MenuItem { title: "Find Previous"; shortcut: @keys(Control + Shift + "g"); enabled: root.has-search; activated => { root.command("find-prev"); } }
+        }
+        Menu {
             title: "View";
-            MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + "s"); activated => { root.command("toggle-sidebar"); } }
+            MenuItem { title: "Content Only"; shortcut: @keys(Control + Alt + "1"); activated => { root.command("content-only"); } }
             MenuItem { title: "Thumbnails"; shortcut: @keys(Control + Alt + "2"); enabled: root.has-document; activated => { root.command("sidebar-thumbnails"); } }
+            MenuItem { title: "Table of Contents"; shortcut: @keys(Control + Alt + "3"); enabled: root.has-document; activated => { root.command("sidebar-contents"); } }
+            MenuItem { title: "Bookmarks"; shortcut: @keys(Control + Alt + "5"); enabled: root.has-document; activated => { root.command("sidebar-bookmarks"); } }
+            MenuItem { title: "Contact Sheet"; shortcut: @keys(Control + Alt + "6"); checkable: true; checked: root.contact-sheet; enabled: root.has-document; activated => { root.command("contact-sheet"); } }
+            MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + "s"); activated => { root.command("toggle-sidebar"); } }
             MenuSeparator { }
             MenuItem { title: "Continuous Scroll"; shortcut: @keys(Control + "1"); checkable: true; checked: root.display-mode == "continuous"; enabled: root.has-document; activated => { root.command("view-continuous"); } }
             MenuItem { title: "Single Page"; shortcut: @keys(Control + "2"); checkable: true; checked: root.display-mode == "single"; enabled: root.has-document; activated => { root.command("view-single"); } }
@@ -100,9 +148,12 @@ export component MainWindow inherits Window {
             MenuSeparator { }
             MenuItem { title: "Actual Size"; shortcut: @keys(Control + "0"); enabled: root.has-document; activated => { root.command("zoom-actual"); } }
             MenuItem { title: "Zoom to Fit"; shortcut: @keys(Control + "9"); enabled: root.has-document; activated => { root.command("zoom-fit-page"); } }
+            MenuItem { title: "Zoom to Selection"; shortcut: @keys(Control + "8"); enabled: root.has-rect-selection; activated => { root.command("zoom-to-selection"); } }
             MenuItem { title: "Zoom to Width"; enabled: root.has-document; activated => { root.command("zoom-fit-width"); } }
             MenuItem { title: "Zoom In"; shortcut: @keys(Control + "="); enabled: root.has-document; activated => { root.command("zoom-in"); } }
             MenuItem { title: "Zoom Out"; shortcut: @keys(Control + "-"); enabled: root.has-document; activated => { root.command("zoom-out"); } }
+            MenuSeparator { }
+            MenuItem { title: "Slideshow"; shortcut: @keys(Control + Shift + "f"); enabled: root.has-document; activated => { root.command("slideshow"); } }
             MenuSeparator { }
             Menu {
                 title: "Appearance";
@@ -115,10 +166,20 @@ export component MainWindow inherits Window {
             title: "Go";
             MenuItem { title: "Previous Page"; shortcut: @keys(Control + Alt + UpArrow); enabled: root.has-document; activated => { root.command("page-prev"); } }
             MenuItem { title: "Next Page"; shortcut: @keys(Control + Alt + DownArrow); enabled: root.has-document; activated => { root.command("page-next"); } }
-            MenuItem { title: "First Page"; shortcut: @keys(Home); enabled: root.has-document; activated => { root.command("page-first"); } }
-            MenuItem { title: "Last Page"; shortcut: @keys(End); enabled: root.has-document; activated => { root.command("page-last"); } }
+            MenuItem { title: "First Page"; enabled: root.has-document; activated => { root.command("page-first"); } }
+            MenuItem { title: "Last Page"; enabled: root.has-document; activated => { root.command("page-last"); } }
             MenuSeparator { }
             MenuItem { title: "Go to Page…"; shortcut: @keys(Control + Alt + "g"); enabled: root.has-document && root.multi-page; activated => { root.command("go-to-page"); } }
+            MenuSeparator { }
+            MenuItem { title: root.page-bookmarked ? "Remove Bookmark" : "Add Bookmark"; shortcut: @keys(Control + "d"); enabled: root.has-file; activated => { root.command("toggle-bookmark"); } }
+        }
+        Menu {
+            title: "Tools";
+            MenuItem { title: "Text Selection"; checkable: true; checked: root.tool == "text"; enabled: root.has-document; activated => { root.command("tool-text"); } }
+            MenuItem { title: "Rectangular Selection"; checkable: true; checked: root.tool == "rect"; enabled: root.has-document; activated => { root.command("tool-rect"); } }
+            MenuSeparator { }
+            MenuItem { title: "Show Magnifier"; shortcut: @keys(Control + "`"); checkable: true; checked: root.loupe-on; enabled: root.has-document; activated => { root.command("toggle-loupe"); } }
+            MenuItem { title: "Show Inspector"; shortcut: @keys(Control + "i"); checkable: true; checked: root.inspector-visible; enabled: root.has-document; activated => { root.command("inspector"); } }
         }
         Menu {
             title: "Window";
@@ -165,7 +226,7 @@ export component MainWindow inherits Window {
                 VerticalLayout {
                     alignment: center;
                     padding-left: 6px;
-                    min-width: 120px;
+                    min-width: 100px;
                     horizontal-stretch: 1;
                     Text {
                         text: root.has-document ? root.doc-title : "Paper Mirror";
@@ -184,6 +245,16 @@ export component MainWindow inherits Window {
                 }
                 VerticalLayout {
                     alignment: center;
+                    IconButton {
+                        icon: Icons.info;
+                        tip: "Show the inspector (Ctrl+I)";
+                        enabled: root.has-document;
+                        selected: root.inspector-visible;
+                        clicked => { root.command("inspector"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
                     Segmented {
                         left-icon: Icons.zoom-out;
                         right-icon: Icons.zoom-in;
@@ -192,6 +263,32 @@ export component MainWindow inherits Window {
                         enabled: root.has-document;
                         left-clicked => { root.command("zoom-out"); }
                         right-clicked => { root.command("zoom-in"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    padding-left: 6px;
+                    search := LineEdit {
+                        width: 190px;
+                        enabled: root.has-document;
+                        placeholder-text: "Search";
+                        accessible-label: "Search document";
+                        text <=> root.search-text;
+                        accepted => { root.search-submitted(self.text); }
+                        edited(t) => { root.search-edited(t); }
+                        key-pressed(e) => {
+                            if e.text == Key.Escape {
+                                self.text = "";
+                                root.search-submitted("");
+                                root.focus-canvas();
+                                return accept;
+                            }
+                            if e.text == Key.F3 {
+                                root.command(e.modifiers.shift ? "find-prev" : "find-next");
+                                return accept;
+                            }
+                            reject
+                        }
                     }
                 }
             }
@@ -207,12 +304,51 @@ export component MainWindow inherits Window {
                 width: root.sidebar-visible ? root.sidebar-width : 0px;
                 visible: root.sidebar-visible;
                 background: Theme.sidebar-bg;
-                thumbs := ThumbnailList {
-                    items: root.thumbs;
-                    content-height: root.thumbs-content-height;
-                    viewport-changed => { root.thumbs-viewport-changed(); }
-                    item-clicked(i, c, s) => { root.thumb-clicked(i, c, s); }
-                    key(e) => { return root.thumbs-key(e); }
+                VerticalLayout {
+                    SidebarTabs {
+                        mode: root.sidebar-mode;
+                        has-search: root.has-search;
+                        mode-selected(m) => { root.sidebar-mode-selected(m); }
+                    }
+                    if root.sidebar-mode == "search" && root.search-status != "": Text {
+                        text: root.search-status;
+                        font-size: Theme.font-small;
+                        color: Theme.text-secondary;
+                        horizontal-alignment: center;
+                        height: 22px;
+                        vertical-alignment: center;
+                        accessible-role: text;
+                    }
+                    Rectangle {
+                        vertical-stretch: 1;
+                        thumbs := ThumbnailList {
+                            visible: root.sidebar-mode == "thumbnails";
+                            items: root.thumbs;
+                            content-height: root.thumbs-content-height;
+                            viewport-changed => { root.thumbs-viewport-changed(); }
+                            item-clicked(i, c, s) => { root.thumb-clicked(i, c, s); }
+                            key(e) => { return root.thumbs-key(e); }
+                        }
+                        if root.sidebar-mode == "contents": RowList {
+                            rows: root.outline-rows;
+                            label: "Table of contents";
+                            empty-text: "This document has no table of contents.";
+                            row-clicked(id) => { root.list-row-clicked("contents", id); }
+                            row-toggled(id) => { root.list-row-toggled("contents", id); }
+                        }
+                        if root.sidebar-mode == "bookmarks": RowList {
+                            rows: root.bookmark-rows;
+                            label: "Bookmarks";
+                            empty-text: "No bookmarks. Choose Go > Add Bookmark (Ctrl+D) to mark the current page.";
+                            row-clicked(id) => { root.list-row-clicked("bookmarks", id); }
+                        }
+                        if root.sidebar-mode == "search": RowList {
+                            rows: root.search-rows;
+                            label: "Search results";
+                            empty-text: "No matches.";
+                            row-clicked(id) => { root.list-row-clicked("search", id); }
+                        }
+                    }
                 }
             }
             if root.sidebar-visible: Rectangle {
@@ -233,16 +369,39 @@ export component MainWindow inherits Window {
                     }
                 }
             }
-            canvas := Canvas {
-                pages: root.pages;
-                content-width: root.content-width;
-                content-height: root.content-height;
-                has-document: root.has-document;
-                empty-title: "Open a PDF or image";
-                empty-detail: "Choose File > Open, press Ctrl+O, or drag a file into this window.";
-                viewport-changed => { root.canvas-viewport-changed(); }
-                ctrl-wheel(d, x, y) => { root.canvas-ctrl-wheel(d, x, y); }
-                key(e) => { return root.canvas-key(e); }
+            Rectangle {
+                horizontal-stretch: 1;
+                canvas := Canvas {
+                    visible: !root.contact-sheet;
+                    pages: root.pages;
+                    overlays: root.overlays;
+                    content-width: root.content-width;
+                    content-height: root.content-height;
+                    has-document: root.has-document;
+                    cursor: root.canvas-cursor;
+                    loupe-visible: root.loupe-visible;
+                    loupe-image: root.loupe-image;
+                    loupe-x: root.loupe-x;
+                    loupe-y: root.loupe-y;
+                    empty-title: "Open a PDF or image";
+                    empty-detail: "Choose File > Open, press Ctrl+O, or drag a file into this window.";
+                    viewport-changed => { root.canvas-viewport-changed(); }
+                    ctrl-wheel(d, x, y) => { root.canvas-ctrl-wheel(d, x, y); }
+                    key(e) => { return root.canvas-key(e); }
+                    pointer(k, x, y, s, c, b) => { root.canvas-pointer(k, x, y, s, c, b); }
+                }
+                sheet := ContactSheet {
+                    visible: root.contact-sheet;
+                    items: root.sheet-items;
+                    content-height: root.sheet-content-height;
+                    viewport-changed => { root.sheet-viewport-changed(); }
+                    item-clicked(i) => { root.sheet-item-clicked(i); }
+                    item-opened(i) => { root.sheet-item-opened(i); }
+                }
+            }
+            if root.inspector-visible: InspectorPanel {
+                rows: root.info-rows;
+                closed => { root.command("inspector"); }
             }
         }
     }
@@ -332,5 +491,10 @@ export component MainWindow inherits Window {
 
     public function focus-canvas() {
         canvas.focus-canvas();
+    }
+
+    public function focus-search() {
+        search.focus();
+        search.select-all();
     }
 }

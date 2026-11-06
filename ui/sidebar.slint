@@ -205,3 +205,45 @@ export component RowList inherits Rectangle {
         wrap: word-wrap;
     }
 }
+
+// Mode tabs along the top of the sidebar.
+export component SidebarTabs inherits Rectangle {
+    in-out property <string> mode: "thumbnails";
+    in property <bool> has-search;
+    callback mode-selected(mode: string);
+    height: 34px;
+    background: Theme.sidebar-bg;
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+        alignment: center;
+        for t in [
+            { id: "thumbnails", label: "Thumbnails", icon: "M3 3 H8.5 V8.5 H3 Z M11.5 3 H17 V8.5 H11.5 Z M3 11.5 H8.5 V17 H3 Z M11.5 11.5 H17 V17 H11.5 Z" },
+            { id: "contents", label: "Table of Contents", icon: "M3.5 5 H5 M8 5 H16.5 M3.5 10 H5 M8 10 H16.5 M3.5 15 H5 M8 15 H16.5" },
+            { id: "bookmarks", label: "Bookmarks", icon: "M5.5 3 H14.5 V17 L10 13.5 L5.5 17 Z" },
+            { id: "search", label: "Search Results", icon: "M8.5 3.5 A5 5 0 1 1 8.49 3.5 M12.2 12.2 L16.5 16.5" },
+        ]: Rectangle {
+            width: 30px;
+            height: 26px;
+            border-radius: 5px;
+            visible: t.id != "search" || root.has-search;
+            background: root.mode == t.id ? Theme.control-selected : tab-touch.has-hover ? Theme.control-hover : transparent;
+            accessible-role: tab;
+            accessible-label: t.label;
+            accessible-item-selected: root.mode == t.id;
+            accessible-action-default => { root.mode-selected(t.id); }
+            Path {
+                width: 16px;
+                height: 16px;
+                commands: t.icon;
+                viewbox-width: 20;
+                viewbox-height: 20;
+                stroke: root.mode == t.id ? Theme.accent : Theme.text;
+                stroke-width: 1.4px;
+                fill: transparent;
+            }
+            tab-touch := TouchArea { clicked => { root.mode-selected(t.id); } }
+        }
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.separator; }
+}
