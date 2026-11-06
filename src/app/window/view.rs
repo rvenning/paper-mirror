@@ -167,6 +167,7 @@ impl DocWindow {
         self.pages_model.set_vec(items);
         self.overlays_model.set_vec(overlays);
         self.refresh_annotations();
+        self.refresh_fields();
         self.ensure_links(&visible_pages);
         if page_changed {
             self.refresh_outline_rows();

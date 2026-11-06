@@ -71,10 +71,9 @@ impl DocWindow {
                 self.st.borrow_mut().drag = None;
                 self.ui.set_loupe_visible(false);
             }
-            POINTER_DOUBLE
-                if !self.markup_double_click(p) && self.st.borrow().tool.selects_text() => {
-                    self.select_word_at(p);
-                }
+            POINTER_DOUBLE if !self.markup_double_click(p) && self.st.borrow().tool.selects_text() => {
+                self.select_word_at(p);
+            }
             _ => {}
         }
     }

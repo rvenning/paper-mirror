@@ -4,6 +4,7 @@ pub mod annot_io;
 pub mod document;
 pub mod engine;
 pub mod ffi;
+pub mod forms;
 pub mod outline;
 pub mod redact;
 pub mod security;

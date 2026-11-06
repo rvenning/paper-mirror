@@ -108,10 +108,11 @@ impl DocWindow {
         // Keep the original before the first overwrite in this session.
         if in_place && !self.st.borrow().original_saved {
             if let Some(p) = &path
-                && let Err(e) = crate::storage::originals::backup(p) {
-                    self.error("The original couldn’t be preserved, so the file was not saved.", &e.to_string());
-                    return;
-                }
+                && let Err(e) = crate::storage::originals::backup(p)
+            {
+                self.error("The original couldn’t be preserved, so the file was not saved.", &e.to_string());
+                return;
+            }
             self.st.borrow_mut().original_saved = true;
         }
         let annots: Vec<Annotation> = self.annotations();
@@ -164,11 +165,12 @@ impl DocWindow {
             if !copy {
                 st.dirty = false;
                 if let Some(d) = st.doc.as_mut()
-                    && d.path.as_ref() != Some(&target) {
-                        d.title = file_name(&target);
-                        d.path = Some(target.clone());
-                        st.original_saved = false;
-                    }
+                    && d.path.as_ref() != Some(&target)
+                {
+                    d.title = file_name(&target);
+                    d.path = Some(target.clone());
+                    st.original_saved = false;
+                }
             }
         }
         if had_redactions {

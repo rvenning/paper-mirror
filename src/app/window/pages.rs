@@ -76,6 +76,7 @@ impl DocWindow {
         }
         self.refresh_notes_list();
         self.refresh_bookmark_rows();
+        self.load_fields();
     }
 
     /// Trims undo snapshots so the PDF copies stay within budget.
@@ -114,4 +115,87 @@ pub(crate) fn swap_document(
     let sizes = new.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
     s.docs.insert(doc_id, new);
     Ok((previous, sizes))
+}
+
+/// Document edits run on the engine thread; the UI follows up based on the kind.
+#[derive(Clone, Debug)]
+pub(crate) enum EditKind {
+    /// A form field on `page` changed.
+    Form { page: usize },
+}
+
+/// Above this size, edits are not snapshotted for undo (memory and time).
+const SNAPSHOT_MAX_DOC: u64 = 64 * 1024 * 1024;
+
+impl DocWindow {
+    /// Runs `f` on the engine's document, keeping a snapshot for undo, then updates
+    /// the UI according to `kind`.
+    pub(crate) fn edit_document(&self, kind: EditKind, f: impl FnOnce(&PdfDoc) -> Result<(), String> + Send + 'static) {
+        let Some(doc_id) = self.st.borrow().doc.as_ref().map(|d| d.id) else { return };
+        let small = self.doc_path().and_then(|p| std::fs::metadata(p).ok()).is_none_or(|m| m.len() <= SNAPSHOT_MAX_DOC);
+        let win = self.id;
+        self.engine.submit(Priority::Interactive, None, move |s| {
+            let result = (|| {
+                let doc = s.doc(doc_id).ok_or("The document is no longer open.")?;
+                let before =
+                    if small { doc.doc.save_to_vec(doc.doc.security_revision() != -1).map(Arc::new) } else { None };
+                f(doc)?;
+                let sizes: Vec<Size> = doc.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
+                Ok::<_, String>((before, sizes))
+            })();
+            let _ = slint::invoke_from_event_loop(move || {
+                super::super::with_window(win, |w| w.on_document_edited(doc_id, kind, result));
+            });
+        });
+    }
+
+    fn on_document_edited(
+        &self,
+        doc_id: DocId,
+        kind: EditKind,
+        result: Result<(Option<Arc<Vec<u8>>>, Vec<Size>), String>,
+    ) {
+        if self.st.borrow().doc.as_ref().is_none_or(|d| d.id != doc_id) {
+            return;
+        }
+        let (before, _sizes) = match result {
+            Ok(r) => r,
+            Err(e) => {
+                self.error("The change couldn’t be made.", &e);
+                return;
+            }
+        };
+        if let Some(pdf) = before {
+            let annots = self.annotations();
+            let mut st = self.st.borrow_mut();
+            st.undo.push(Snapshot { annots, pdf: Some(pdf) });
+            st.redo.clear();
+        }
+        self.trim_snapshots();
+        self.sync_undo_ui();
+        self.mark_dirty();
+        match kind {
+            EditKind::Form { page } => {
+                self.invalidate_page(page);
+                self.load_fields();
+            }
+        }
+    }
+
+    /// Re-renders one page (its content changed).
+    pub(crate) fn invalidate_page(&self, page: usize) {
+        {
+            let mut st = self.st.borrow_mut();
+            st.page_cache.as_mut().unwrap().remove(&page);
+            st.thumb_cache.as_mut().unwrap().remove(&page);
+            st.sheet_cache.as_mut().unwrap().remove(&page);
+            st.pending_pages.retain(|(p, _)| *p != page);
+            st.pending_thumbs.remove(&page);
+            if st.tile.as_ref().is_some_and(|t| t.page == page) {
+                st.tile = None;
+            }
+        }
+        self.update_view();
+        self.update_thumbs();
+    }
 }

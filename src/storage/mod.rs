@@ -3,6 +3,7 @@
 
 pub mod originals;
 pub mod settings;
+pub mod signatures;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};

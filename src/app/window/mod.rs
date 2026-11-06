@@ -9,6 +9,7 @@
 //! - `markup`: annotations, styles, text editing, undo
 //! - `saving`: save, export, unsaved-changes prompts, originals
 
+mod forms;
 mod inspector;
 mod markup;
 mod open;
@@ -23,6 +24,7 @@ mod view;
 
 pub use markup::{MarkupKind, ShapeKind};
 pub use saving::AfterSave;
+pub use signature::trace_signature_image;
 pub use view::file_name;
 
 use std::cell::RefCell;
@@ -41,7 +43,9 @@ use crate::core::layout::{DisplayMode, Layout, ZoomMode};
 use crate::pdf::engine::{DocId, Engine, GenerationCounter, Priority};
 use crate::pdf::outline::OutlineItem;
 use crate::pdf::text::SearchHit;
-use crate::ui::{AnnotPrim, InfoRow, ListRow, MainWindow, OverlayRect, PageItem, SheetItem, ShortcutRow, ThumbItem};
+use crate::ui::{
+    AnnotPrim, FormFieldView, InfoRow, ListRow, MainWindow, OverlayRect, PageItem, SheetItem, ShortcutRow, ThumbItem,
+};
 
 const PAGE_CACHE_BYTES: usize = 160 * 1024 * 1024;
 const THUMB_CACHE_BYTES: usize = 24 * 1024 * 1024;
@@ -174,6 +178,7 @@ pub(crate) struct ViewState {
     pub lens_cache: HashMap<(u64, u32), slint::Image>,
     /// The original file has been backed up for this session (first in-place save).
     pub original_saved: bool,
+    pub fields: Vec<crate::pdf::forms::Field>,
 }
 
 pub struct DocWindow {
@@ -191,6 +196,8 @@ pub struct DocWindow {
     pub(crate) info_model: Rc<VecModel<InfoRow>>,
     pub(crate) annot_model: Rc<VecModel<AnnotPrim>>,
     pub(crate) notes_model: Rc<VecModel<ListRow>>,
+    pub(crate) forms_model: Rc<VecModel<FormFieldView>>,
+    pub(crate) sig: RefCell<signature::SignatureState>,
     pub(crate) render_gen: GenerationCounter,
     pub(crate) thumb_gen: GenerationCounter,
     pub(crate) search_gen: GenerationCounter,
@@ -258,6 +265,8 @@ impl DocWindow {
             info_model: Rc::new(VecModel::default()),
             annot_model: Rc::new(VecModel::default()),
             notes_model: Rc::new(VecModel::default()),
+            forms_model: Rc::new(VecModel::default()),
+            sig: RefCell::new(Default::default()),
             render_gen: GenerationCounter::default(),
             thumb_gen: GenerationCounter::default(),
             search_gen: GenerationCounter::default(),
@@ -280,6 +289,7 @@ impl DocWindow {
         w.ui.set_info_rows(ModelRc::from(w.info_model.clone()));
         w.ui.set_annot_prims(ModelRc::from(w.annot_model.clone()));
         w.ui.set_note_rows(ModelRc::from(w.notes_model.clone()));
+        w.ui.set_form_fields(ModelRc::from(w.forms_model.clone()));
         w.init_markup_ui();
         w.ui.set_app_version(crate::VERSION.into());
         w.ui.set_display_mode(display_mode_name(mode).into());
@@ -349,6 +359,18 @@ impl DocWindow {
         self.ui.on_markup_set_text_style(move |font, size, color, align| {
             super::with_window(id, |w| w.set_text_style(font.as_str(), size, markup::from_scolor(color), align))
         });
+        self.ui.on_field_commit_text(move |i, t| super::with_window(id, |w| w.field_commit_text(i, t.as_str())));
+        self.ui.on_field_toggle(move |i| super::with_window(id, |w| w.field_toggle(i)));
+        self.ui.on_field_choose(move |i, o| super::with_window(id, |w| w.field_choose(i, o)));
+        self.ui.on_field_sign(move |i| super::with_window(id, |w| w.field_sign(i)));
+        self.ui.on_signature_chosen(move |sid| super::with_window(id, |w| w.signature_chosen(sid as u64)));
+        self.ui.on_signature_delete(move |sid| super::with_window(id, |w| w.signature_delete(sid as u64)));
+        self.ui.on_signature_start_drawing(move || super::with_window(id, |w| w.signature_start_drawing()));
+        self.ui.on_signature_import(move || super::with_window(id, |w| w.signature_import()));
+        self.ui.on_pad_pointer(move |k, x, y| super::with_window(id, |w| w.pad_pointer(k, x, y)));
+        self.ui.on_pad_clear(move || super::with_window(id, |w| w.pad_clear()));
+        self.ui.on_pad_save(move || super::with_window(id, |w| w.pad_save()));
+        self.ui.on_signatures_closed(move || super::with_window(id, |w| w.signatures_closed()));
         self.ui.on_sheet_viewport_changed(move || super::with_window(id, |w| w.update_sheet()));
         self.ui.on_sheet_item_clicked(move |i| super::with_window(id, |w| w.sheet_select(i as usize)));
         self.ui.on_sheet_item_opened(move |i| super::with_window(id, |w| w.sheet_open(i as usize)));
@@ -454,7 +476,7 @@ impl DocWindow {
             "tool-draw" => self.set_tool(Tool::Draw),
             "tool-textbox" => self.set_tool(Tool::TextBox),
             "tool-note" => self.set_tool(Tool::Note),
-            "tool-signature" => self.set_tool(Tool::Signature),
+            "tool-signature" => self.open_signatures(),
             "tool-redact" => {
                 if !self.redact_selection() {
                     self.set_tool(Tool::Redact);
@@ -546,6 +568,7 @@ impl DocWindow {
         st.dirty = false;
         st.lens_cache.clear();
         st.original_saved = false;
+        st.fields.clear();
         drop(st);
         self.render_gen.bump();
         self.thumb_gen.bump();
@@ -569,6 +592,7 @@ impl DocWindow {
         *self.open_password.borrow_mut() = None;
         self.annot_model.set_vec(Vec::new());
         self.notes_model.set_vec(Vec::new());
+        self.forms_model.set_vec(Vec::new());
         self.sync_undo_ui();
         self.ui.set_contact_sheet(false);
     }

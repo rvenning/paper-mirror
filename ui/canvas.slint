@@ -4,6 +4,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { BridgedTextInput } from "controls.slint";
+import { FormLayer, FormFieldView } from "forms.slint";
 
 export struct PageItem {
     index: int,
@@ -105,6 +106,11 @@ export component Canvas inherits Rectangle {
     in property <color> edit-color: black;
     in property <int> edit-align;
     callback edit-finished(text: string);
+    in property <[FormFieldView]> form-fields;
+    callback field-commit-text(index: int, text: string);
+    callback field-toggle(index: int);
+    callback field-choose(index: int, option: int);
+    callback field-sign(index: int);
 
     callback viewport-changed();
     callback ctrl-wheel(delta: float, x: length, y: length);
@@ -242,6 +248,13 @@ export component Canvas inherits Rectangle {
         y: -root.scroll-y;
         width: root.content-width;
         height: root.content-height;
+        FormLayer {
+            fields: root.form-fields;
+            commit-text(i, t) => { root.field-commit-text(i, t); }
+            toggle(i) => { root.field-toggle(i); }
+            choose(i, o) => { root.field-choose(i, o); }
+            sign(i) => { root.field-sign(i); }
+        }
         if root.annot-selected: Rectangle {
             x: root.sel-x;
             y: root.sel-y;

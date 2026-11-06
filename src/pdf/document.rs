@@ -18,6 +18,17 @@ pub struct PdfDoc {
     pub password: Option<String>,
     sizes: Vec<(f32, f32)>,
     pages: RefCell<Vec<(usize, Page)>>,
+    /// Form-fill environment for documents with an AcroForm. Declared after `pages`
+    /// and torn down explicitly in `Drop` so pages close before the form, and the
+    /// form before the document.
+    form: Option<super::forms::FormEnv>,
+}
+
+impl Drop for PdfDoc {
+    fn drop(&mut self) {
+        self.close_pages();
+        self.form = None;
+    }
 }
 
 /// Rendering target: a caller-owned pixel buffer, tightly packed, 4 bytes per pixel,
@@ -40,7 +51,19 @@ impl PdfDoc {
 
     pub fn wrap(doc: Doc, path: Option<PathBuf>, password: Option<String>) -> PdfDoc {
         let sizes = (0..doc.page_count()).map(|i| doc.page_size(i)).collect();
-        PdfDoc { doc, path, password, sizes, pages: RefCell::new(Vec::new()) }
+        let form = super::forms::FormEnv::init(&doc);
+        PdfDoc { doc, path, password, sizes, pages: RefCell::new(Vec::new()), form }
+    }
+
+    pub fn form_handle(&self) -> Option<ffi::FPDF_FORMHANDLE> {
+        self.form.as_ref().map(|f| f.handle)
+    }
+
+    fn release_page(&self, page: Page) {
+        if let Some(form) = self.form_handle() {
+            unsafe { b().FORM_OnBeforeClosePage(page.handle(), form) };
+        }
+        drop(page);
     }
 
     pub fn page_count(&self) -> usize {
@@ -54,7 +77,7 @@ impl PdfDoc {
 
     /// Must be called after any operation that changes pages (rotate, crop, delete...).
     pub fn refresh_pages(&mut self) {
-        self.pages.borrow_mut().clear();
+        self.close_pages();
         self.sizes = (0..self.doc.page_count()).map(|i| self.doc.page_size(i)).collect();
     }
 
@@ -66,8 +89,12 @@ impl PdfDoc {
             cache.push(entry);
         } else {
             let page = self.doc.page(index)?;
+            if let Some(form) = self.form_handle() {
+                unsafe { b().FORM_OnAfterLoadPage(page.handle(), form) };
+            }
             if cache.len() >= OPEN_PAGE_CACHE {
-                cache.remove(0);
+                let (_, old) = cache.remove(0);
+                self.release_page(old);
             }
             cache.push((index, page));
         }
@@ -77,7 +104,10 @@ impl PdfDoc {
 
     /// Drops cached page handles (e.g. before page structure changes).
     pub fn close_pages(&self) {
-        self.pages.borrow_mut().clear();
+        let pages: Vec<(usize, Page)> = self.pages.borrow_mut().drain(..).collect();
+        for (_, p) in pages {
+            self.release_page(p);
+        }
     }
 
     /// Renders part of a page. `scale` is device pixels per point; `(ox, oy)` is the
@@ -118,6 +148,21 @@ impl PdfDoc {
                     flags |= ffi::FPDF_ANNOT;
                 }
                 b().FPDF_RenderPageBitmapWithMatrix(bmp, page.handle(), &m, &clip, flags);
+                // With a form environment, PDFium leaves widgets to FFLDraw.
+                if annotations && let Some(form) = self.form_handle() {
+                    let (pw, ph) = (page.width() * scale, page.height() * scale);
+                    b().FPDF_FFLDraw(
+                        form,
+                        bmp,
+                        page.handle(),
+                        -ox.round() as c_int,
+                        -oy.round() as c_int,
+                        pw.round() as c_int,
+                        ph.round() as c_int,
+                        0,
+                        flags,
+                    );
+                }
                 b().FPDFBitmap_Destroy(bmp);
             }
             true

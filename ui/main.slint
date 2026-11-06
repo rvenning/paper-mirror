@@ -9,8 +9,9 @@ import { ThumbnailList, ThumbItem, RowList, ListRow, SidebarTabs } from "sidebar
 import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
 import { InspectorPanel, InfoRow } from "inspector.slint";
 import { SlideshowWindow } from "slideshow.slint";
+import { FormFieldView, SignatureView, SignaturesPanel } from "forms.slint";
 
-export { Theme, EditBridge, AnnotPrim, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
+export { Theme, EditBridge, AnnotPrim, FormFieldView, SignatureView, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
 
 export component MainWindow inherits Window {
     // Document state
@@ -66,6 +67,14 @@ export component MainWindow inherits Window {
     in property <color> edit-color: black;
     in property <int> edit-align;
     in property <[ListRow]> note-rows;
+
+    // Forms and signatures
+    in property <[FormFieldView]> form-fields;
+    in-out property <bool> signatures-visible;
+    in property <[SignatureView]> signatures;
+    in property <bool> sig-drawing;
+    in property <string> pad-commands;
+    in-out property <string> sig-name;
 
     // Canvas
     in property <[PageItem]> pages;
@@ -145,6 +154,18 @@ export component MainWindow inherits Window {
     callback markup-set-fill(c: color, none: bool);
     callback markup-set-line(width: float, dashed: bool);
     callback markup-set-text-style(font: string, size: float, color: color, align: int);
+    callback field-commit-text(index: int, text: string);
+    callback field-toggle(index: int);
+    callback field-choose(index: int, option: int);
+    callback field-sign(index: int);
+    callback signature-chosen(id: int);
+    callback signature-delete(id: int);
+    callback signature-start-drawing();
+    callback signature-import();
+    callback pad-pointer(kind: int, x: length, y: length);
+    callback pad-clear();
+    callback pad-save();
+    callback signatures-closed();
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
@@ -255,6 +276,7 @@ export component MainWindow inherits Window {
                 MenuItem { title: "Draw"; activated => { root.command("tool-draw"); } }
             }
             MenuItem { title: "Redact"; shortcut: @keys(Control + Shift + "r"); enabled: root.has-document; activated => { root.command("tool-redact"); } }
+            MenuItem { title: "Signatures…"; enabled: root.has-document; activated => { root.command("tool-signature"); } }
             MenuSeparator { }
             MenuItem { title: "Show Magnifier"; shortcut: @keys(Control + "`"); checkable: true; checked: root.loupe-on; enabled: root.has-document; activated => { root.command("toggle-loupe"); } }
             MenuItem { title: "Show Inspector"; shortcut: @keys(Control + "i"); checkable: true; checked: root.inspector-visible; enabled: root.has-document; activated => { root.command("inspector"); } }
@@ -533,6 +555,11 @@ export component MainWindow inherits Window {
                     edit-color: root.edit-color;
                     edit-align: root.edit-align;
                     edit-finished(t) => { root.edit-finished(t); }
+                    form-fields: root.form-fields;
+                    field-commit-text(i, t) => { root.field-commit-text(i, t); }
+                    field-toggle(i) => { root.field-toggle(i); }
+                    field-choose(i, o) => { root.field-choose(i, o); }
+                    field-sign(i) => { root.field-sign(i); }
                     context-command(id) => { root.command(id); }
                 }
                 sheet := ContactSheet {
@@ -561,7 +588,24 @@ export component MainWindow inherits Window {
         busy-label := Text { text: root.busy-text; color: white; font-size: Theme.font-size; }
     }
 
-    if root.prompt-kind != "" || root.shortcuts-visible: Scrim { }
+    if root.prompt-kind != "" || root.shortcuts-visible || root.signatures-visible: Scrim { }
+
+    if root.signatures-visible: SignaturesPanel {
+        x: (root.width - self.width) / 2;
+        y: max(30px, (root.height - self.height) / 3);
+        signatures: root.signatures;
+        drawing: root.sig-drawing;
+        pad-commands: root.pad-commands;
+        new-name <=> root.sig-name;
+        chosen(id) => { root.signature-chosen(id); }
+        delete(id) => { root.signature-delete(id); }
+        start-drawing => { root.signature-start-drawing(); }
+        import-image => { root.signature-import(); }
+        pad-pointer(k, x, y) => { root.pad-pointer(k, x, y); }
+        pad-clear => { root.pad-clear(); }
+        pad-save => { root.pad-save(); }
+        closed => { root.signatures-closed(); }
+    }
 
     if root.prompt-kind != "": PromptPanel {
         x: (root.width - self.width) / 2;

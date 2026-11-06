@@ -170,6 +170,7 @@ impl DocWindow {
         self.load_outline(id);
         self.load_bookmarks();
         self.refresh_notes_list();
+        self.load_fields();
         if self.ui.get_inspector_visible() {
             self.refresh_inspector();
         }
