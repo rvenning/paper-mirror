@@ -120,11 +120,10 @@ impl DocWindow {
             self.ui.set_has_rect_selection(true);
             self.refresh_overlays();
         }
-        if let Some(anchor) = text_anchor {
-            if let Some(focus) = self.caret_at_content(p) {
+        if let Some(anchor) = text_anchor
+            && let Some(focus) = self.caret_at_content(p) {
                 self.set_text_selection(Some(TextSelection { anchor, focus }));
             }
-        }
         self.update_hover(p);
     }
 

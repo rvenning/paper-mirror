@@ -87,14 +87,14 @@ pub fn rgba_to_dib(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&1u16.to_le_bytes()); // planes
     out.extend_from_slice(&32u16.to_le_bytes()); // bit count
     out.extend_from_slice(&0u32.to_le_bytes()); // BI_RGB
-    out.extend_from_slice(&((width * height * 4) as u32).to_le_bytes());
+    out.extend_from_slice(&(width * height * 4).to_le_bytes());
     out.extend_from_slice(&2835i32.to_le_bytes()); // 72 dpi in pixels per metre
     out.extend_from_slice(&2835i32.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes());
     let row = width as usize * 4;
     for y in (0..height as usize).rev() {
-        for px in rgba[y * row..(y + 1) * row].chunks_exact(4) {
+        for px in rgba[y * row..(y + 1) * row].as_chunks::<4>().0 {
             out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
         }
     }

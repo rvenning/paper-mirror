@@ -146,9 +146,114 @@ impl Rotation {
     }
 }
 
+/// A 2D affine transform `(a b c d e f)` mapping (x, y) to (a·x + c·y + e, b·x + d·y + f),
+/// the same convention as a PDF `cm` matrix.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Affine {
+    pub a: f32,
+    pub b: f32,
+    pub c: f32,
+    pub d: f32,
+    pub e: f32,
+    pub f: f32,
+}
+
+impl Default for Affine {
+    fn default() -> Self {
+        Affine::IDENTITY
+    }
+}
+
+impl Affine {
+    pub const IDENTITY: Affine = Affine { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: 0.0, f: 0.0 };
+
+    pub fn translate(dx: f32, dy: f32) -> Affine {
+        Affine { e: dx, f: dy, ..Affine::IDENTITY }
+    }
+
+    pub fn scale(sx: f32, sy: f32) -> Affine {
+        Affine { a: sx, d: sy, ..Affine::IDENTITY }
+    }
+
+    /// Builds the transform that maps the unit basis to three image points: the
+    /// origin, the image of (1, 0) and the image of (0, 1).
+    pub fn from_basis(origin: Point, x1: Point, y1: Point) -> Affine {
+        Affine {
+            a: x1.x - origin.x,
+            b: x1.y - origin.y,
+            c: y1.x - origin.x,
+            d: y1.y - origin.y,
+            e: origin.x,
+            f: origin.y,
+        }
+    }
+
+    pub fn apply(&self, p: Point) -> Point {
+        Point::new(self.a * p.x + self.c * p.y + self.e, self.b * p.x + self.d * p.y + self.f)
+    }
+
+    /// `self` after `other`: (self ∘ other)(p) = self(other(p)).
+    pub fn then(&self, other: &Affine) -> Affine {
+        Affine {
+            a: other.a * self.a + other.b * self.c,
+            b: other.a * self.b + other.b * self.d,
+            c: other.c * self.a + other.d * self.c,
+            d: other.c * self.b + other.d * self.d,
+            e: other.e * self.a + other.f * self.c + self.e,
+            f: other.e * self.b + other.f * self.d + self.f,
+        }
+    }
+
+    pub fn inverse(&self) -> Option<Affine> {
+        let det = self.a * self.d - self.b * self.c;
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
+        Some(Affine { a, b, c, d, e: -(a * self.e + c * self.f), f: -(b * self.e + d * self.f) })
+    }
+
+    /// Bounding box of a transformed rectangle.
+    pub fn apply_rect(&self, r: Rect) -> Rect {
+        let pts = [
+            self.apply(Point::new(r.x, r.y)),
+            self.apply(Point::new(r.right(), r.y)),
+            self.apply(Point::new(r.x, r.bottom())),
+            self.apply(Point::new(r.right(), r.bottom())),
+        ];
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for p in pts {
+            x0 = x0.min(p.x);
+            y0 = y0.min(p.y);
+            x1 = x1.max(p.x);
+            y1 = y1.max(p.y);
+        }
+        Rect::new(x0, y0, x1 - x0, y1 - y0)
+    }
+
+    /// Average scale factor (for stroke widths under the transform).
+    pub fn scale_factor(&self) -> f32 {
+        (self.a * self.d - self.b * self.c).abs().sqrt()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn affine_compose_and_invert() {
+        let t = Affine::translate(10.0, 20.0).then(&Affine::scale(2.0, 3.0));
+        assert_eq!(t.apply(Point::new(1.0, 1.0)), Point::new(12.0, 23.0));
+        let inv = t.inverse().unwrap();
+        let p = inv.apply(Point::new(12.0, 23.0));
+        assert!((p.x - 1.0).abs() < 1e-5 && (p.y - 1.0).abs() < 1e-5);
+        // Display space of an unrotated Letter page -> PDF user space (y flipped).
+        let m = Affine::from_basis(Point::new(0.0, 792.0), Point::new(1.0, 792.0), Point::new(0.0, 791.0));
+        assert_eq!(m.apply(Point::new(10.0, 20.0)), Point::new(10.0, 772.0));
+        assert_eq!(m.apply_rect(Rect::new(0.0, 0.0, 10.0, 10.0)), Rect::new(0.0, 782.0, 10.0, 10.0));
+        assert!((m.scale_factor() - 1.0).abs() < 1e-6);
+    }
 
     #[test]
     fn rect_from_points_normalises_corners() {
