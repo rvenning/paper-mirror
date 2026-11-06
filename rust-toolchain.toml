@@ -1,0 +1,6 @@
+# x86_64-pc-windows-gnullvm pairs Rust with llvm-mingw (clang, lld, llvm-dlltool), so
+# no Visual Studio Build Tools or Windows SDK are needed and everything lives on D:.
+[toolchain]
+channel = "1.99.1-x86_64-pc-windows-gnullvm"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

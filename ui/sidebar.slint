@@ -1,0 +1,207 @@
+// Sidebar: page thumbnails (virtualised by Rust), and list modes for the table of
+// contents, bookmarks and search results.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export struct ThumbItem {
+    index: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    image: image,
+    has-image: bool,
+    label: string,
+    selected: bool,
+    bookmarked: bool,
+}
+
+export struct ListRow {
+    id: int,
+    depth: int,
+    title: string,
+    detail: string,
+    selected: bool,
+    expandable: bool,
+    expanded: bool,
+}
+
+export component ThumbnailList inherits Rectangle {
+    in property <[ThumbItem]> items;
+    in property <length> content-height;
+    out property <length> scroll-y: -scroll.content-y;
+    out property <length> view-height: scroll.visible-height;
+    out property <length> view-width: scroll.visible-width;
+    callback viewport-changed();
+    callback item-clicked(index: int, ctrl: bool, shift: bool);
+    callback item-context(index: int, x: length, y: length);
+    callback key(event: KeyEvent) -> bool;
+
+    accessible-role: list;
+    accessible-label: "Page thumbnails";
+    changed width => { root.viewport-changed(); }
+    changed height => { root.viewport-changed(); }
+
+    scroll := ScrollView {
+        content-height: root.content-height;
+        content-width: self.visible-width;
+        changed content-y => { root.viewport-changed(); }
+
+        for t in root.items: Rectangle {
+            x: t.x;
+            y: t.y;
+            width: t.width + 12px;
+            height: t.height + 30px;
+            accessible-role: list-item;
+            accessible-label: t.label;
+            accessible-item-selectable: true;
+            accessible-item-selected: t.selected;
+            accessible-action-default => { root.item-clicked(t.index, false, false); }
+
+            Rectangle {
+                x: 2px;
+                y: 2px;
+                width: t.width + 8px;
+                height: t.height + 8px;
+                border-radius: 5px;
+                background: t.selected ? Theme.control-selected : transparent;
+            }
+            Rectangle {
+                x: 6px;
+                y: 6px;
+                width: t.width;
+                height: t.height;
+                background: white;
+                border-width: 1px;
+                border-color: Theme.page-border;
+                if t.has-image: Image {
+                    source: t.image;
+                    width: parent.width;
+                    height: parent.height;
+                    image-fit: fill;
+                }
+            }
+            if t.bookmarked: Path {
+                x: t.width - 6px;
+                y: 4px;
+                width: 12px;
+                height: 16px;
+                commands: "M0 0 H10 V14 L5 10 L0 14 Z";
+                viewbox-width: 10;
+                viewbox-height: 14;
+                fill: #e5484d;
+            }
+            Text {
+                y: t.height + 12px;
+                width: parent.width;
+                text: t.label;
+                horizontal-alignment: center;
+                font-size: Theme.font-small;
+                color: t.selected ? Theme.text : Theme.text-secondary;
+            }
+            TouchArea {
+                pointer-event(e) => {
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.left {
+                        root.item-clicked(t.index, e.modifiers.control, e.modifiers.shift);
+                        focus.focus();
+                    }
+                    if e.kind == PointerEventKind.down && e.button == PointerEventButton.right {
+                        root.item-context(t.index, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                    }
+                }
+            }
+        }
+    }
+
+    focus := FocusScope {
+        key-pressed(e) => { root.key(e) ? accept : reject }
+    }
+
+    public function scroll-to(y: length) {
+        scroll.content-y = -y;
+    }
+
+    public function focus-list() {
+        focus.focus();
+    }
+}
+
+// Indented text list for outlines, bookmarks and search results.
+export component RowList inherits Rectangle {
+    in property <[ListRow]> rows;
+    in property <string> empty-text;
+    in property <string> label;
+    callback row-clicked(id: int);
+    callback row-toggled(id: int);
+
+    accessible-role: list;
+    accessible-label: label;
+
+    ScrollView {
+        content-width: self.visible-width;
+        VerticalLayout {
+            padding: 6px;
+            spacing: 1px;
+            alignment: start;
+            for r in root.rows: Rectangle {
+                height: max(26px, row-layout.preferred-height + 8px);
+                border-radius: 5px;
+                background: r.selected ? Theme.control-selected : row-touch.has-hover ? Theme.control-hover : transparent;
+                accessible-role: list-item;
+                accessible-label: r.detail == "" ? r.title : r.title + ", " + r.detail;
+                accessible-item-selectable: true;
+                accessible-item-selected: r.selected;
+                accessible-action-default => { root.row-clicked(r.id); }
+                row-touch := TouchArea {
+                    clicked => { root.row-clicked(r.id); }
+                }
+                row-layout := HorizontalLayout {
+                    padding-left: 6px + r.depth * 14px;
+                    padding-right: 6px;
+                    spacing: 4px;
+                    Rectangle {
+                        width: 14px;
+                        if r.expandable: Path {
+                            width: 10px;
+                            height: 10px;
+                            commands: r.expanded ? "M1 3 L5 7 L9 3" : "M3 1 L7 5 L3 9";
+                            viewbox-width: 10;
+                            viewbox-height: 10;
+                            stroke: Theme.text-secondary;
+                            stroke-width: 1.4px;
+                            fill: transparent;
+                        }
+                        TouchArea {
+                            enabled: r.expandable;
+                            clicked => { root.row-toggled(r.id); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: r.title;
+                            color: Theme.text;
+                            font-size: Theme.font-size;
+                            overflow: elide;
+                        }
+                        if r.detail != "": Text {
+                            text: r.detail;
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-small;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.rows.length == 0: Text {
+        text: root.empty-text;
+        color: Theme.text-secondary;
+        font-size: Theme.font-size;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+}

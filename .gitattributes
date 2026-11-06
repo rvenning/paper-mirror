@@ -1,0 +1,13 @@
+* text=auto
+*.pdf binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.tif binary
+*.heic binary
+*.jp2 binary
+*.exr binary
+*.glb binary
+*.stl binary
+*.ply binary
+*.sh text eol=lf

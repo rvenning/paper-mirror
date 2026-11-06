@@ -1,0 +1,242 @@
+// Paper Mirror main document window.
+import { AboutSlint } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip } from "controls.slint";
+import { Canvas, PageItem } from "canvas.slint";
+import { ThumbnailList, ThumbItem, RowList, ListRow } from "sidebar.slint";
+
+export { Theme, PageItem, ThumbItem, ListRow }
+
+export component MainWindow inherits Window {
+    // Document state
+    in property <string> doc-title: "Paper Mirror";
+    in property <string> doc-subtitle;
+    in property <bool> has-document;
+    in property <bool> edited;
+    in property <string> zoom-label;
+    in property <string> status-text;
+    in property <string> app-version;
+
+    // Canvas
+    in property <[PageItem]> pages;
+    in property <length> content-width;
+    in property <length> content-height;
+    out property <length> scroll-x: canvas.scroll-x;
+    out property <length> scroll-y: canvas.scroll-y;
+    out property <length> view-width: canvas.view-width;
+    out property <length> view-height: canvas.view-height;
+
+    // Sidebar
+    in-out property <bool> sidebar-visible: true;
+    in-out property <length> sidebar-width: 170px;
+    in property <[ThumbItem]> thumbs;
+    in property <length> thumbs-content-height;
+    out property <length> thumbs-scroll-y: thumbs.scroll-y;
+    out property <length> thumbs-view-height: thumbs.view-height;
+    out property <length> thumbs-view-width: thumbs.view-width;
+
+    callback command(id: string);
+    callback canvas-viewport-changed();
+    callback canvas-ctrl-wheel(delta: float, x: length, y: length);
+    callback canvas-key(event: KeyEvent) -> bool;
+    callback thumbs-viewport-changed();
+    callback thumb-clicked(index: int, ctrl: bool, shift: bool);
+    callback thumbs-key(event: KeyEvent) -> bool;
+
+    title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
+    preferred-width: 1100px;
+    preferred-height: 820px;
+    min-width: 520px;
+    min-height: 380px;
+    background: Theme.window-bg;
+    default-font-size: Theme.font-size;
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem { title: "Open…"; shortcut: @keys(Control + O); activated => { root.command("open"); } }
+            MenuSeparator { }
+            MenuItem { title: "Close Window"; shortcut: @keys(Control + W); activated => { root.command("close"); } }
+        }
+        Menu {
+            title: "View";
+            MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + S); activated => { root.command("toggle-sidebar"); } }
+            MenuSeparator { }
+            MenuItem { title: "Actual Size"; shortcut: @keys(Control + "0"); enabled: root.has-document; activated => { root.command("zoom-actual"); } }
+            MenuItem { title: "Zoom to Fit"; shortcut: @keys(Control + "9"); enabled: root.has-document; activated => { root.command("zoom-fit-page"); } }
+            MenuItem { title: "Zoom to Width"; enabled: root.has-document; activated => { root.command("zoom-fit-width"); } }
+            MenuItem { title: "Zoom In"; shortcut: @keys(Control + "="); enabled: root.has-document; activated => { root.command("zoom-in"); } }
+            MenuItem { title: "Zoom Out"; shortcut: @keys(Control + "-"); enabled: root.has-document; activated => { root.command("zoom-out"); } }
+        }
+        Menu {
+            title: "Help";
+            MenuItem { title: "About Paper Mirror"; activated => { about.show(); } }
+        }
+    }
+
+    VerticalLayout {
+        // Toolbar
+        Rectangle {
+            height: Theme.toolbar-height;
+            background: Theme.toolbar-bg;
+            accessible-role: groupbox;
+            accessible-label: "Toolbar";
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 10px;
+                spacing: 4px;
+                alignment: stretch;
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.sidebar;
+                        tip: "Show or hide the sidebar";
+                        selected: root.sidebar-visible;
+                        clicked => { root.command("toggle-sidebar"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    padding-left: 6px;
+                    min-width: 120px;
+                    Text {
+                        text: root.has-document ? root.doc-title : "Paper Mirror";
+                        font-weight: 600;
+                        font-size: Theme.font-title;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+                    if root.doc-subtitle != "": Text {
+                        text: root.doc-subtitle;
+                        font-size: Theme.font-small;
+                        color: Theme.text-secondary;
+                        overflow: elide;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Segmented {
+                        left-icon: Icons.zoom-out;
+                        right-icon: Icons.zoom-in;
+                        left-tip: "Zoom out";
+                        right-tip: "Zoom in";
+                        enabled: root.has-document;
+                        left-clicked => { root.command("zoom-out"); }
+                        right-clicked => { root.command("zoom-in"); }
+                    }
+                }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.toolbar-border;
+            }
+        }
+
+        HorizontalLayout {
+            Rectangle {
+                width: root.sidebar-visible ? root.sidebar-width : 0px;
+                visible: root.sidebar-visible;
+                background: Theme.sidebar-bg;
+                thumbs := ThumbnailList {
+                    items: root.thumbs;
+                    content-height: root.thumbs-content-height;
+                    viewport-changed => { root.thumbs-viewport-changed(); }
+                    item-clicked(i, c, s) => { root.thumb-clicked(i, c, s); }
+                    key(e) => { return root.thumbs-key(e); }
+                }
+            }
+            if root.sidebar-visible: Rectangle {
+                width: 1px;
+                background: Theme.separator;
+                TouchArea {
+                    x: -3px;
+                    width: 7px;
+                    mouse-cursor: ew-resize;
+                    moved => {
+                        if self.pressed {
+                            root.sidebar-width = clamp(root.sidebar-width + self.mouse-x - self.pressed-x, Theme.sidebar-min, Theme.sidebar-max);
+                        }
+                    }
+                }
+            }
+            canvas := Canvas {
+                pages: root.pages;
+                content-width: root.content-width;
+                content-height: root.content-height;
+                has-document: root.has-document;
+                empty-title: "Open a PDF or image";
+                empty-detail: "Choose File > Open, press Ctrl+O, or drag a file into this window.";
+                viewport-changed => { root.canvas-viewport-changed(); }
+                ctrl-wheel(d, x, y) => { root.canvas-ctrl-wheel(d, x, y); }
+                key(e) => { return root.canvas-key(e); }
+            }
+        }
+    }
+
+    // Tooltip overlay, drawn last so it sits above every panel.
+    if Tooltip.shown: Rectangle {
+        x: min(Tooltip.x, root.width - self.width - 4px);
+        y: Tooltip.y;
+        width: tip-text.preferred-width + 14px;
+        height: tip-text.preferred-height + 8px;
+        border-radius: 4px;
+        background: Theme.dark ? #3a3a3a : #fafafa;
+        border-width: 1px;
+        border-color: Theme.separator;
+        tip-text := Text {
+            text: Tooltip.text;
+            font-size: Theme.font-small;
+            color: Theme.text;
+        }
+    }
+
+    about := PopupWindow {
+        x: (root.width - 360px) / 2;
+        y: (root.height - 300px) / 2;
+        width: 360px;
+        height: 300px;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            VerticalLayout {
+                padding: 18px;
+                spacing: 8px;
+                Text { text: "Paper Mirror"; font-size: 18px; font-weight: 600; color: Theme.text; horizontal-alignment: center; }
+                Text { text: "Version " + root.app-version; color: Theme.text-secondary; horizontal-alignment: center; }
+                Text {
+                    text: "A lightweight PDF and image viewer for Windows, inspired by macOS Preview. Not affiliated with Apple.";
+                    wrap: word-wrap;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                }
+                AboutSlint { }
+                HorizontalLayout {
+                    alignment: center;
+                    PlainButton { text: "Third-party notices"; clicked => { root.command("show-notices"); } }
+                }
+            }
+        }
+    }
+
+    public function show-about() {
+        about.show();
+    }
+
+    public function scroll-canvas-to(x: length, y: length) {
+        canvas.scroll-to(x, y);
+    }
+
+    public function scroll-thumbs-to(y: length) {
+        thumbs.scroll-to(y);
+    }
+
+    public function focus-canvas() {
+        canvas.focus-canvas();
+    }
+}

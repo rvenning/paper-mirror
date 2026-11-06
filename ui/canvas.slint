@@ -1,0 +1,125 @@
+// The document canvas: a virtualised page surface. Rust computes which pages are in
+// view and where they sit; this file only draws what it is given.
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export struct PageItem {
+    index: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    image: image,
+    has-image: bool,
+    // High-zoom detail tile covering only the visible part of the page.
+    tile: image,
+    has-tile: bool,
+    tile-x: length,
+    tile-y: length,
+    tile-width: length,
+    tile-height: length,
+    label: string,
+}
+
+export component Canvas inherits Rectangle {
+    in property <[PageItem]> pages;
+    in property <length> content-width;
+    in property <length> content-height;
+    out property <length> scroll-x: -flick.content-x;
+    out property <length> scroll-y: -flick.content-y;
+    in property <string> empty-title;
+    in property <string> empty-detail;
+    in property <bool> has-document;
+    out property <length> view-width: flick.visible-width;
+    out property <length> view-height: flick.visible-height;
+
+    callback viewport-changed();
+    callback ctrl-wheel(delta: float, x: length, y: length);
+    callback key(event: KeyEvent) -> bool;
+
+    background: Theme.canvas-bg;
+    accessible-role: groupbox;
+    accessible-label: "Document";
+
+    changed width => { root.viewport-changed(); }
+    changed height => { root.viewport-changed(); }
+
+    flick := ScrollView {
+        content-width: root.content-width;
+        content-height: root.content-height;
+        // Flickable offsets are negative; scroll-x/scroll-y expose positive offsets.
+        changed content-x => { root.viewport-changed(); }
+        changed content-y => { root.viewport-changed(); }
+
+        wheel := TouchArea {
+            width: max(root.content-width, flick.visible-width);
+            height: max(root.content-height, flick.visible-height);
+            scroll-event(e) => {
+                if e.modifiers.control {
+                    root.ctrl-wheel(e.delta-y / 1px, self.mouse-x - root.scroll-x, self.mouse-y - root.scroll-y);
+                    return accept;
+                }
+                reject
+            }
+            clicked => { focus.focus(); }
+        }
+
+        for p in root.pages: Rectangle {
+            x: p.x;
+            y: p.y;
+            width: p.width;
+            height: p.height;
+            background: white;
+            border-width: 1px;
+            border-color: Theme.page-border;
+            accessible-role: image;
+            accessible-label: p.label;
+            if p.has-image: Image {
+                width: parent.width;
+                height: parent.height;
+                source: p.image;
+                image-fit: fill;
+                image-rendering: smooth;
+            }
+            if p.has-tile: Image {
+                x: p.tile-x;
+                y: p.tile-y;
+                width: p.tile-width;
+                height: p.tile-height;
+                source: p.tile;
+                image-fit: fill;
+            }
+        }
+    }
+
+    if !root.has-document: VerticalLayout {
+        alignment: center;
+        spacing: 6px;
+        Text {
+            text: root.empty-title;
+            color: Theme.text-secondary;
+            font-size: 18px;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.empty-detail;
+            color: Theme.text-secondary;
+            font-size: Theme.font-size;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+
+    focus := FocusScope {
+        key-pressed(e) => { root.key(e) ? accept : reject }
+    }
+
+    public function scroll-to(x: length, y: length) {
+        flick.content-x = -x;
+        flick.content-y = -y;
+    }
+
+    public function focus-canvas() {
+        focus.focus();
+    }
+}

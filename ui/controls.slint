@@ -1,0 +1,176 @@
+// Reusable Paper Mirror controls.
+import { Theme } from "theme.slint";
+
+// Window-level tooltip state; the main window draws the bubble above everything.
+export global Tooltip {
+    in-out property <string> text;
+    in-out property <length> x;
+    in-out property <length> y;
+    in-out property <bool> shown;
+}
+
+export component Glyph inherits Path {
+    in property <string> icon;
+    in property <brush> color: Theme.text;
+    commands: icon;
+    viewbox-width: 20;
+    viewbox-height: 20;
+    width: 18px;
+    height: 18px;
+    stroke: color;
+    stroke-width: 1.5px;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+    fill: transparent;
+}
+
+// Square toolbar button with hover, pressed, selected, disabled and focus states.
+export component IconButton inherits Rectangle {
+    in property <string> icon;
+    in property <string> tip;
+    in property <bool> enabled: true;
+    in property <bool> selected: false;
+    in property <bool> filled-icon: false;
+    callback clicked();
+
+    width: Theme.icon-button-size;
+    height: Theme.icon-button-size;
+    border-radius: Theme.radius;
+    background: !enabled ? transparent : touch.pressed ? Theme.control-pressed : selected ? Theme.control-selected : touch.has-hover ? Theme.control-hover : transparent;
+    accessible-role: button;
+    accessible-label: tip;
+    accessible-enabled: enabled;
+    accessible-checked: selected;
+    accessible-action-default => { if enabled { clicked(); } }
+
+    glyph := Glyph {
+        icon: root.icon;
+        color: root.enabled ? (root.selected ? Theme.accent : Theme.text) : Theme.text-disabled;
+        fill: root.filled-icon ? self.color : transparent;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { Tooltip.shown = false; root.clicked(); }
+        changed has-hover => {
+            if self.has-hover {
+                tip-timer.running = true;
+            } else {
+                tip-timer.running = false;
+                if Tooltip.text == root.tip { Tooltip.shown = false; }
+            }
+        }
+    }
+
+    tip-timer := Timer {
+        interval: 550ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            if touch.has-hover && root.tip != "" {
+                Tooltip.text = root.tip;
+                Tooltip.x = root.absolute-position.x;
+                Tooltip.y = root.absolute-position.y + root.height + 4px;
+                Tooltip.shown = true;
+            }
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: Theme.radius;
+        border-width: 2px;
+        border-color: Theme.focus-ring;
+    }
+}
+
+// Two-part segmented control used for zoom out/in.
+export component Segmented inherits Rectangle {
+    in property <string> left-icon;
+    in property <string> right-icon;
+    in property <string> left-tip;
+    in property <string> right-tip;
+    in property <bool> enabled: true;
+    callback left-clicked();
+    callback right-clicked();
+    width: 2 * Theme.icon-button-size + 1px;
+    height: Theme.icon-button-size;
+    HorizontalLayout {
+        IconButton { icon: root.left-icon; tip: root.left-tip; enabled: root.enabled; clicked => { root.left-clicked(); } }
+        Rectangle { width: 1px; background: Theme.separator; }
+        IconButton { icon: root.right-icon; tip: root.right-tip; enabled: root.enabled; clicked => { root.right-clicked(); } }
+    }
+}
+
+export component ToolbarSeparator inherits Rectangle {
+    width: 1px;
+    height: 20px;
+    background: Theme.separator;
+}
+
+// Text button used in panels and dialogs.
+export component PlainButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+    min-width: max(72px, label.preferred-width + 24px);
+    height: 28px;
+    border-radius: Theme.radius;
+    border-width: primary ? 0px : 1px;
+    border-color: Theme.field-border;
+    background: !enabled ? Theme.control-hover : primary ? (touch.pressed ? Theme.accent.darker(20%) : Theme.accent) : touch.pressed ? Theme.control-pressed : touch.has-hover ? Theme.control-hover : Theme.field-bg;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-enabled: enabled;
+    accessible-action-default => { if enabled { clicked(); } }
+    label := Text {
+        text: root.text;
+        color: !root.enabled ? Theme.text-disabled : root.primary ? Theme.accent-text : Theme.text;
+        font-size: Theme.font-size;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
+            reject
+        }
+    }
+    if focus.has-focus: Rectangle {
+        border-radius: Theme.radius;
+        border-width: 2px;
+        border-color: Theme.focus-ring;
+    }
+}
+
+// Colour swatch used by the markup style popovers.
+export component Swatch inherits Rectangle {
+    in property <color> swatch;
+    in property <bool> selected;
+    in property <string> name;
+    callback clicked();
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background: swatch;
+    border-width: selected ? 2px : 1px;
+    border-color: selected ? Theme.accent : Theme.separator;
+    accessible-role: button;
+    accessible-label: name;
+    accessible-checked: selected;
+    accessible-action-default => { clicked(); }
+    TouchArea { clicked => { root.clicked(); } }
+}
