@@ -21,6 +21,7 @@ impl DocWindow {
             "thumbnails" => self.update_thumbs(),
             "contents" => self.refresh_outline_rows(),
             "bookmarks" => self.refresh_bookmark_rows(),
+            "notes" => self.refresh_notes_list(),
             _ => {}
         }
     }
@@ -36,6 +37,14 @@ impl DocWindow {
             }
             "bookmarks" => self.go_to_page(id),
             "search" => self.select_hit(id),
+            "notes" => {
+                let page = self.st.borrow().annots.iter().find(|a| a.id == id as u64).map(|a| a.page);
+                if let Some(p) = page {
+                    self.go_to_page(p);
+                    self.select_annotation(Some(id as u64));
+                    self.refresh_notes_list();
+                }
+            }
             _ => {}
         }
     }
@@ -121,6 +130,57 @@ impl DocWindow {
         }
         drop(st);
         self.outline_model.set_vec(rows);
+    }
+
+    // ----- Highlights and notes ------------------------------------------------------
+
+    pub(crate) fn refresh_notes_list(&self) {
+        use crate::core::annot::Shape;
+        let st = self.st.borrow();
+        let rows: Vec<ListRow> = st
+            .annots
+            .iter()
+            .filter(|a| {
+                matches!(
+                    a.shape,
+                    Shape::Highlight { .. }
+                        | Shape::Underline { .. }
+                        | Shape::StrikeOut { .. }
+                        | Shape::Note { .. }
+                        | Shape::TextBox { .. }
+                )
+            })
+            .map(|a| {
+                // Highlights show the text they cover when that page's text is loaded.
+                let covered = match &a.shape {
+                    Shape::Highlight { rects } | Shape::Underline { rects } | Shape::StrikeOut { rects } => {
+                        st.page_text.get(&a.page).map(|t| {
+                            let mut s = String::new();
+                            for r in rects {
+                                let a0 = t.caret_at(crate::core::geometry::Point::new(r.x + 0.5, r.center().y));
+                                let b0 = t.caret_at(crate::core::geometry::Point::new(r.right() - 0.5, r.center().y));
+                                s.push_str(t.text(a0, b0).trim());
+                                s.push(' ');
+                            }
+                            s.trim().to_string()
+                        })
+                    }
+                    _ => None,
+                };
+                let text = a.shape.text().map(str::to_string).or(covered).filter(|s| !s.is_empty());
+                ListRow {
+                    id: a.id as i32,
+                    depth: 0,
+                    title: text.unwrap_or_else(|| a.shape.name().to_string()).into(),
+                    detail: format!("{} · Page {}", a.shape.name(), a.page + 1).into(),
+                    selected: st.selected_annot == Some(a.id),
+                    expandable: false,
+                    expanded: false,
+                }
+            })
+            .collect();
+        drop(st);
+        self.notes_model.set_vec(rows);
     }
 
     pub fn outline_len(&self) -> usize {

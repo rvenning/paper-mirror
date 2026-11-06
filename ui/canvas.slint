@@ -3,6 +3,7 @@
 // input back in content coordinates.
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { BridgedTextInput } from "controls.slint";
 
 export struct PageItem {
     index: int,
@@ -30,6 +31,25 @@ export struct OverlayRect {
     width: length,
     height: length,
     kind: int,
+}
+
+// One drawing primitive of an annotation, in content coordinates.
+// kind: 0 stroked path, 1 filled path, 2 text, 3 loupe image.
+export struct AnnotPrim {
+    kind: int,
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    commands: string,
+    color: color,
+    stroke-width: length,
+    text: string,
+    font-family: string,
+    font-size: length,
+    align: int,
+    image: image,
+    label: string,
 }
 
 export struct SheetItem {
@@ -66,6 +86,25 @@ export component Canvas inherits Rectangle {
     out property <bool> hovered: wheel.has-hover;
     in property <bool> can-copy;
     callback context-command(id: string);
+    in property <[AnnotPrim]> annot-prims;
+    in property <bool> annot-selected;
+    in property <bool> annot-resizable;
+    in property <length> sel-x;
+    in property <length> sel-y;
+    in property <length> sel-w;
+    in property <length> sel-h;
+    in property <bool> editing;
+    in property <bool> edit-note;
+    in property <length> edit-x;
+    in property <length> edit-y;
+    in property <length> edit-w;
+    in property <length> edit-h;
+    in-out property <string> edit-text;
+    in property <length> edit-font-size: 14px;
+    in property <string> edit-font;
+    in property <color> edit-color: black;
+    in property <int> edit-align;
+    callback edit-finished(text: string);
 
     callback viewport-changed();
     callback ctrl-wheel(delta: float, x: length, y: length);
@@ -74,6 +113,7 @@ export component Canvas inherits Rectangle {
     callback pointer(kind: int, x: length, y: length, shift: bool, ctrl: bool, button: int);
 
     background: Theme.canvas-bg;
+    clip: true;
     accessible-role: groupbox;
     accessible-label: "Document";
 
@@ -114,6 +154,52 @@ export component Canvas inherits Rectangle {
             }
         }
 
+        for a in root.annot-prims: Rectangle {
+            x: a.x;
+            y: a.y;
+            width: a.width;
+            height: a.height;
+            accessible-role: image;
+            accessible-label: a.label;
+            if a.kind == 0: Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: parent.width / 1px;
+                viewbox-height: parent.height / 1px;
+                commands: a.commands;
+                stroke: a.color;
+                stroke-width: a.stroke-width;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+                fill: transparent;
+            }
+            if a.kind == 1: Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: parent.width / 1px;
+                viewbox-height: parent.height / 1px;
+                commands: a.commands;
+                fill: a.color;
+                stroke: transparent;
+            }
+            if a.kind == 2: Text {
+                width: parent.width;
+                height: parent.height;
+                text: a.text;
+                font-family: a.font-family;
+                font-size: a.font-size;
+                color: a.color;
+                vertical-alignment: top;
+                horizontal-alignment: a.align == 1 ? TextHorizontalAlignment.center : a.align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+            }
+            if a.kind == 3: Rectangle {
+                border-radius: self.width / 2;
+                clip: true;
+                background: white;
+                Image { width: parent.width; height: parent.height; source: a.image; image-fit: fill; }
+            }
+        }
+
         for o in root.overlays: Rectangle {
             x: o.x;
             y: o.y;
@@ -145,6 +231,68 @@ export component Canvas inherits Rectangle {
             }
             double-clicked => {
                 root.pointer(4, self.mouse-x, self.mouse-y, false, false, 0);
+            }
+        }
+    }
+
+    // Selection frame, handles and the text editor sit above the page content but
+    // inside the scrolled coordinate space.
+    Rectangle {
+        x: -root.scroll-x;
+        y: -root.scroll-y;
+        width: root.content-width;
+        height: root.content-height;
+        if root.annot-selected: Rectangle {
+            x: root.sel-x;
+            y: root.sel-y;
+            width: root.sel-w;
+            height: root.sel-h;
+            border-width: 1px;
+            border-color: Theme.accent;
+            for h in root.annot-resizable ? [
+                { x: 0, y: 0 }, { x: 0.5, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 0.5 },
+                { x: 1, y: 1 }, { x: 0.5, y: 1 }, { x: 0, y: 1 }, { x: 0, y: 0.5 },
+            ] : []: Rectangle {
+                x: h.x * parent.width - 4px;
+                y: h.y * parent.height - 4px;
+                width: 8px;
+                height: 8px;
+                background: white;
+                border-width: 1px;
+                border-color: Theme.accent;
+            }
+        }
+        if root.editing: Rectangle {
+            x: root.edit-x;
+            y: root.edit-y;
+            width: root.edit-w;
+            height: root.edit-h;
+            background: root.edit-note ? #fff7c2 : #ffffffe6;
+            border-width: 1px;
+            border-color: Theme.accent;
+            drop-shadow-blur: root.edit-note ? 8px : 0px;
+            drop-shadow-color: #00000040;
+            editor := BridgedTextInput {
+                x: 4px;
+                y: 3px;
+                width: parent.width - 8px;
+                height: parent.height - 6px;
+                text <=> root.edit-text;
+                font-size: root.edit-font-size;
+                font-family: root.edit-font;
+                color: root.edit-color;
+                single-line: false;
+                wrap: word-wrap;
+                horizontal-alignment: root.edit-align == 1 ? TextHorizontalAlignment.center : root.edit-align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                accessible-label: root.edit-note ? "Note text" : "Text box";
+                init => { self.focus(); self.select-all(); }
+                key-pressed(e) => {
+                    if e.text == Key.Escape { root.edit-finished(self.text); return accept; }
+                    reject
+                }
+                changed has-focus => {
+                    if !self.has-focus { root.edit-finished(self.text); }
+                }
             }
         }
     }

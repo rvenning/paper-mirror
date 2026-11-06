@@ -10,6 +10,21 @@ export global EditBridge {
     in-out property <int> serial;
 }
 
+export component BridgedTextInput inherits TextInput {
+    property <int> bridge-serial: EditBridge.serial;
+    changed bridge-serial => {
+        if self.has-focus {
+            if EditBridge.op == "copy" { self.copy(); }
+            else if EditBridge.op == "cut" { self.cut(); }
+            else if EditBridge.op == "paste" { self.paste(); }
+            else if EditBridge.op == "select-all" { self.select-all(); }
+            else if EditBridge.op == "undo" { self.undo(); }
+            else if EditBridge.op == "redo" { self.redo(); }
+        }
+    }
+    changed has-focus => { EditBridge.field-focused = self.has-focus; }
+}
+
 export component BridgedLineEdit inherits LineEdit {
     property <int> bridge-serial: EditBridge.serial;
     changed bridge-serial => {

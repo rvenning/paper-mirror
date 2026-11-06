@@ -150,17 +150,19 @@ impl DocWindow {
 
     fn put_text(&self, s: String) {
         if super::super::context().winit
-            && let Err(e) = crate::platform_windows::clipboard::set_text(&s) {
-                self.error("Couldn’t copy.", &e);
-            }
+            && let Err(e) = crate::platform_windows::clipboard::set_text(&s)
+        {
+            self.error("Couldn’t copy.", &e);
+        }
         *self.last_copied.borrow_mut() = Some(s);
     }
 
     fn put_image(&self, w: u32, h: u32, px: Vec<u8>) {
         if super::super::context().winit
-            && let Err(e) = crate::platform_windows::clipboard::set_image(w, h, &px) {
-                self.error("Couldn’t copy.", &e);
-            }
+            && let Err(e) = crate::platform_windows::clipboard::set_image(w, h, &px)
+        {
+            self.error("Couldn’t copy.", &e);
+        }
         *self.last_copied.borrow_mut() = Some(format!("[image {w}x{h}]"));
     }
 }

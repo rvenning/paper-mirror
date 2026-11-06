@@ -121,11 +121,12 @@ fn annotations_round_trip_through_save_and_reopen() {
     let mut subtypes = Vec::new();
     for obj in lo.objects.values() {
         if let Ok(dict) = obj.as_dict()
-            && dict.get(b"Type").and_then(|t| t.as_name()).ok() == Some(b"Annot".as_slice()) {
-                subtypes.push(String::from_utf8_lossy(dict.get(b"Subtype").unwrap().as_name().unwrap()).to_string());
-                assert!(dict.has(b"AP"), "every annotation has an appearance");
-                assert!(dict.has(annot_io::PM_KEY.as_bytes()));
-            }
+            && dict.get(b"Type").and_then(|t| t.as_name()).ok() == Some(b"Annot".as_slice())
+        {
+            subtypes.push(String::from_utf8_lossy(dict.get(b"Subtype").unwrap().as_name().unwrap()).to_string());
+            assert!(dict.has(b"AP"), "every annotation has an appearance");
+            assert!(dict.has(annot_io::PM_KEY.as_bytes()));
+        }
     }
     subtypes.sort();
     for s in [

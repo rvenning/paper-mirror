@@ -6,15 +6,23 @@
 //! - `tools`: pointer input, rectangular selection, loupe, links
 //! - `sheet`: contact sheet and slideshow
 //! - `inspector`: document information
+//! - `markup`: annotations, styles, text editing, undo
+//! - `saving`: save, export, unsaved-changes prompts, originals
 
 mod inspector;
+mod markup;
 mod open;
+mod pages;
+mod saving;
 mod selection;
 mod sheet;
 mod sidebar;
+mod signature;
 mod tools;
 mod view;
 
+pub use markup::{MarkupKind, ShapeKind};
+pub use saving::AfterSave;
 pub use view::file_name;
 
 use std::cell::RefCell;
@@ -25,6 +33,7 @@ use std::time::Duration;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
+use crate::core::annot::{Annotation, Color, Style};
 use crate::core::cache::ByteLru;
 use crate::core::commands;
 use crate::core::geometry::{Point, Rect, Size};
@@ -32,7 +41,7 @@ use crate::core::layout::{DisplayMode, Layout, ZoomMode};
 use crate::pdf::engine::{DocId, Engine, GenerationCounter, Priority};
 use crate::pdf::outline::OutlineItem;
 use crate::pdf::text::SearchHit;
-use crate::ui::{InfoRow, ListRow, MainWindow, OverlayRect, PageItem, SheetItem, ShortcutRow, ThumbItem};
+use crate::ui::{AnnotPrim, InfoRow, ListRow, MainWindow, OverlayRect, PageItem, SheetItem, ShortcutRow, ThumbItem};
 
 const PAGE_CACHE_BYTES: usize = 160 * 1024 * 1024;
 const THUMB_CACHE_BYTES: usize = 24 * 1024 * 1024;
@@ -67,6 +76,28 @@ pub enum Tool {
     #[default]
     Text,
     Rect,
+    Sketch,
+    Draw,
+    Shape(ShapeKind),
+    TextBox,
+    Highlight(MarkupKind),
+    Signature,
+    Note,
+    Redact,
+}
+
+impl Tool {
+    /// Tools that select text by dragging.
+    pub fn selects_text(self) -> bool {
+        matches!(self, Tool::Text | Tool::Highlight(_))
+    }
+}
+
+/// One undo step: the annotation list and, for page operations, the document bytes.
+#[derive(Clone)]
+pub(crate) struct Snapshot {
+    pub annots: Vec<Annotation>,
+    pub pdf: Option<std::sync::Arc<Vec<u8>>>,
 }
 
 #[derive(Default)]
@@ -129,6 +160,20 @@ pub(crate) struct ViewState {
     pub text_sel: Option<crate::core::textsel::TextSelection>,
     /// Where the current text drag started.
     pub sel_anchor: Option<crate::core::textsel::Caret>,
+    pub annots: Vec<Annotation>,
+    pub next_annot_id: u64,
+    pub selected_annot: Option<u64>,
+    pub annot_drag: Option<markup::AnnotDrag>,
+    pub creating: Option<markup::Creating>,
+    pub editing: Option<u64>,
+    pub style: Style,
+    pub highlight_color: Color,
+    pub undo: Vec<Snapshot>,
+    pub redo: Vec<Snapshot>,
+    pub dirty: bool,
+    pub lens_cache: HashMap<(u64, u32), slint::Image>,
+    /// The original file has been backed up for this session (first in-place save).
+    pub original_saved: bool,
 }
 
 pub struct DocWindow {
@@ -144,6 +189,8 @@ pub struct DocWindow {
     pub(crate) search_model: Rc<VecModel<ListRow>>,
     pub(crate) sheet_model: Rc<VecModel<SheetItem>>,
     pub(crate) info_model: Rc<VecModel<InfoRow>>,
+    pub(crate) annot_model: Rc<VecModel<AnnotPrim>>,
+    pub(crate) notes_model: Rc<VecModel<ListRow>>,
     pub(crate) render_gen: GenerationCounter,
     pub(crate) thumb_gen: GenerationCounter,
     pub(crate) search_gen: GenerationCounter,
@@ -156,6 +203,11 @@ pub struct DocWindow {
     pub last_opened_link: RefCell<Option<String>>,
     /// Last text copied (kept for tests; the test backend never touches the clipboard).
     pub last_copied: RefCell<Option<String>>,
+    /// Last file written by a save (kept for tests).
+    pub last_saved: RefCell<Option<PathBuf>>,
+    /// Password the document was opened with, kept in memory only so a re-save stays
+    /// protected. Never written to disk or logs.
+    pub(crate) open_password: RefCell<Option<String>>,
 }
 
 pub fn display_mode_from(s: &str) -> DisplayMode {
@@ -193,6 +245,7 @@ impl DocWindow {
                 page_cache: Some(ByteLru::new(PAGE_CACHE_BYTES)),
                 thumb_cache: Some(ByteLru::new(THUMB_CACHE_BYTES)),
                 sheet_cache: Some(ByteLru::new(SHEET_CACHE_BYTES)),
+                highlight_color: Color::HIGHLIGHT_YELLOW,
                 ..Default::default()
             }),
             pages_model: Rc::new(VecModel::default()),
@@ -203,6 +256,8 @@ impl DocWindow {
             search_model: Rc::new(VecModel::default()),
             sheet_model: Rc::new(VecModel::default()),
             info_model: Rc::new(VecModel::default()),
+            annot_model: Rc::new(VecModel::default()),
+            notes_model: Rc::new(VecModel::default()),
             render_gen: GenerationCounter::default(),
             thumb_gen: GenerationCounter::default(),
             search_gen: GenerationCounter::default(),
@@ -212,6 +267,8 @@ impl DocWindow {
             last_error: RefCell::new(None),
             last_opened_link: RefCell::new(None),
             last_copied: RefCell::new(None),
+            last_saved: RefCell::new(None),
+            open_password: RefCell::new(None),
         });
         w.ui.set_pages(ModelRc::from(w.pages_model.clone()));
         w.ui.set_thumbs(ModelRc::from(w.thumbs_model.clone()));
@@ -221,6 +278,9 @@ impl DocWindow {
         w.ui.set_search_rows(ModelRc::from(w.search_model.clone()));
         w.ui.set_sheet_items(ModelRc::from(w.sheet_model.clone()));
         w.ui.set_info_rows(ModelRc::from(w.info_model.clone()));
+        w.ui.set_annot_prims(ModelRc::from(w.annot_model.clone()));
+        w.ui.set_note_rows(ModelRc::from(w.notes_model.clone()));
+        w.init_markup_ui();
         w.ui.set_app_version(crate::VERSION.into());
         w.ui.set_display_mode(display_mode_name(mode).into());
         w.ui.set_sidebar_visible(sidebar_visible);
@@ -280,6 +340,15 @@ impl DocWindow {
                 }
             })
         });
+        self.ui.on_edit_finished(move |t| super::with_window(id, |w| w.finish_edit(t.as_str())));
+        self.ui.on_markup_set_stroke(move |c| super::with_window(id, |w| w.set_stroke_color(markup::from_scolor(c))));
+        self.ui.on_markup_set_fill(move |c, none| {
+            super::with_window(id, |w| w.set_fill_color((!none).then(|| markup::from_scolor(c))))
+        });
+        self.ui.on_markup_set_line(move |width, dashed| super::with_window(id, |w| w.set_line_style(width, dashed)));
+        self.ui.on_markup_set_text_style(move |font, size, color, align| {
+            super::with_window(id, |w| w.set_text_style(font.as_str(), size, markup::from_scolor(color), align))
+        });
         self.ui.on_sheet_viewport_changed(move || super::with_window(id, |w| w.update_sheet()));
         self.ui.on_sheet_item_clicked(move |i| super::with_window(id, |w| w.sheet_select(i as usize)));
         self.ui.on_sheet_item_opened(move |i| super::with_window(id, |w| w.sheet_open(i as usize)));
@@ -294,6 +363,12 @@ impl DocWindow {
             handled
         });
         self.ui.window().on_close_requested(move || {
+            // Unsaved changes are resolved first; the window closes only if allowed.
+            let mut close = true;
+            super::with_window(id, |w| close = w.confirm_close());
+            if !close {
+                return slint::CloseRequestResponse::KeepWindowShown;
+            }
             // Defer removal: the window must not be dropped inside its own callback.
             slint::Timer::single_shot(Duration::ZERO, move || super::unregister_window(id));
             slint::CloseRequestResponse::HideWindow
@@ -321,11 +396,23 @@ impl DocWindow {
                 super::update_settings(|s| s.recent.clear());
                 super::refresh_window_menus();
             }
-            "close" => self.close(),
+            "close" => {
+                if self.confirm_close() {
+                    self.close();
+                }
+            }
             "show-in-explorer" => {
                 if let Some(p) = self.doc_path() {
                     crate::platform_windows::shell::reveal_in_explorer(&p);
                 }
+            }
+            "save" => self.save(false),
+            "save-as" => self.save(true),
+            "export-pdf" => self.export_pdf(),
+            "undo" => self.undo(),
+            "redo" => self.redo(),
+            "delete" => {
+                self.delete_selected_annotation();
             }
             "copy" => self.copy(),
             "select-all" => self.select_all(),
@@ -363,6 +450,37 @@ impl DocWindow {
             "toggle-bookmark" => self.toggle_bookmark(),
             "tool-text" => self.set_tool(Tool::Text),
             "tool-rect" => self.set_tool(Tool::Rect),
+            "tool-sketch" => self.set_tool(Tool::Sketch),
+            "tool-draw" => self.set_tool(Tool::Draw),
+            "tool-textbox" => self.set_tool(Tool::TextBox),
+            "tool-note" => self.set_tool(Tool::Note),
+            "tool-signature" => self.set_tool(Tool::Signature),
+            "tool-redact" => {
+                if !self.redact_selection() {
+                    self.set_tool(Tool::Redact);
+                }
+            }
+            "tool-highlight" | "highlight" | "underline" | "strikethrough" => {
+                let kind = match cmd {
+                    "underline" => MarkupKind::Underline,
+                    "strikethrough" => MarkupKind::StrikeOut,
+                    _ => MarkupKind::Highlight,
+                };
+                // With text selected, mark it up now; otherwise enter the mode.
+                if !self.apply_markup(kind) {
+                    self.set_tool(Tool::Highlight(kind));
+                }
+            }
+            "shape-line" => self.select_shape_tool(ShapeKind::Line),
+            "shape-arrow" => self.select_shape_tool(ShapeKind::Arrow),
+            "shape-rect" => self.select_shape_tool(ShapeKind::Rect),
+            "shape-rounded" => self.select_shape_tool(ShapeKind::Rounded),
+            "shape-oval" => self.select_shape_tool(ShapeKind::Oval),
+            "shape-bubble" => self.select_shape_tool(ShapeKind::Bubble),
+            "shape-star" => self.select_shape_tool(ShapeKind::Star),
+            "shape-lens" => self.select_shape_tool(ShapeKind::Lens),
+            "toggle-markup" => self.ui.set_markup_visible(!self.ui.get_markup_visible()),
+            "sidebar-notes" => self.set_sidebar_mode("notes"),
             "toggle-loupe" => self.toggle_loupe(),
             "inspector" => self.toggle_inspector(),
             "minimize" => self.ui.window().set_minimized(true),
@@ -418,6 +536,16 @@ impl DocWindow {
         st.page_text.clear();
         st.pending_text.clear();
         st.text_sel = None;
+        st.annots.clear();
+        st.selected_annot = None;
+        st.annot_drag = None;
+        st.creating = None;
+        st.editing = None;
+        st.undo.clear();
+        st.redo.clear();
+        st.dirty = false;
+        st.lens_cache.clear();
+        st.original_saved = false;
         drop(st);
         self.render_gen.bump();
         self.thumb_gen.bump();
@@ -435,6 +563,13 @@ impl DocWindow {
         self.ui.set_search_status(SharedString::new());
         self.ui.set_has_rect_selection(false);
         self.ui.set_has_text_selection(false);
+        self.ui.set_editing(false);
+        self.ui.set_annot_selected(false);
+        self.ui.set_edited(false);
+        *self.open_password.borrow_mut() = None;
+        self.annot_model.set_vec(Vec::new());
+        self.notes_model.set_vec(Vec::new());
+        self.sync_undo_ui();
         self.ui.set_contact_sheet(false);
     }
 

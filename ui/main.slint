@@ -3,13 +3,14 @@ import { AboutSlint, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
 import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip, EditBridge, BridgedLineEdit } from "controls.slint";
-import { Canvas, PageItem, OverlayRect, ContactSheet, SheetItem } from "canvas.slint";
+import { Canvas, PageItem, OverlayRect, ContactSheet, SheetItem, AnnotPrim } from "canvas.slint";
+import { MarkupBar } from "markup.slint";
 import { ThumbnailList, ThumbItem, RowList, ListRow, SidebarTabs } from "sidebar.slint";
 import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow } from "dialogs.slint";
 import { InspectorPanel, InfoRow } from "inspector.slint";
 import { SlideshowWindow } from "slideshow.slint";
 
-export { Theme, EditBridge, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
+export { Theme, EditBridge, AnnotPrim, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
 
 export component MainWindow inherits Window {
     // Document state
@@ -25,11 +26,46 @@ export component MainWindow inherits Window {
     in property <[string]> recent-files;
     in property <[string]> window-titles;
     in property <int> window-index;
-    in property <string> tool: "text";
+    in property <string> tool: "tool-text";
     in property <bool> loupe-on;
     in property <bool> has-rect-selection;
     in property <bool> page-bookmarked;
     in property <bool> has-text-selection;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <string> busy-text;
+
+    // Markup
+    in-out property <bool> markup-visible;
+    in property <color> markup-stroke: #e5484d;
+    in property <color> markup-fill: white;
+    in property <bool> markup-fill-none: true;
+    in property <float> markup-line-width: 2;
+    in property <bool> markup-dashed;
+    in property <[string]> markup-fonts;
+    in property <string> markup-font: "Arial";
+    in property <float> markup-font-size: 14;
+    in property <color> markup-text-color: black;
+    in property <int> markup-align;
+    in property <[AnnotPrim]> annot-prims;
+    in property <bool> annot-selected;
+    in property <bool> annot-resizable;
+    in property <length> sel-x;
+    in property <length> sel-y;
+    in property <length> sel-w;
+    in property <length> sel-h;
+    in property <bool> editing;
+    in property <bool> edit-note;
+    in property <length> edit-x;
+    in property <length> edit-y;
+    in property <length> edit-w;
+    in property <length> edit-h;
+    in-out property <string> edit-text;
+    in property <length> edit-font-size: 14px;
+    in property <string> edit-font: "Arial";
+    in property <color> edit-color: black;
+    in property <int> edit-align;
+    in property <[ListRow]> note-rows;
 
     // Canvas
     in property <[PageItem]> pages;
@@ -104,6 +140,11 @@ export component MainWindow inherits Window {
     callback sheet-viewport-changed();
     callback sheet-item-clicked(index: int);
     callback sheet-item-opened(index: int);
+    callback edit-finished(text: string);
+    callback markup-set-stroke(c: color);
+    callback markup-set-fill(c: color, none: bool);
+    callback markup-set-line(width: float, dashed: bool);
+    callback markup-set-text-style(font: string, size: float, color: color, align: int);
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
@@ -124,14 +165,22 @@ export component MainWindow inherits Window {
                 MenuItem { title: "Clear Menu"; enabled: root.recent-files.length > 0; activated => { root.command("clear-recent"); } }
             }
             MenuSeparator { }
+            MenuItem { title: "Save"; shortcut: @keys(Control + "s"); enabled: root.has-file; activated => { root.command("save"); } }
+            MenuItem { title: "Save As…"; shortcut: @keys(Control + Shift + "s"); enabled: root.has-file; activated => { root.command("save-as"); } }
+            MenuItem { title: "Export as Flattened PDF…"; enabled: root.has-file; activated => { root.command("export-pdf"); } }
+            MenuSeparator { }
             MenuItem { title: "Show in File Explorer"; enabled: root.has-file; activated => { root.command("show-in-explorer"); } }
             MenuSeparator { }
             MenuItem { title: "Close Window"; shortcut: @keys(Control + "w"); activated => { root.command("close"); } }
         }
         Menu {
             title: "Edit";
+            MenuItem { title: "Undo"; shortcut: @keys(Control + "z"); enabled: EditBridge.field-focused || root.can-undo; activated => { root.command("undo"); } }
+            MenuItem { title: "Redo"; shortcut: @keys(Control + Shift + "z"); enabled: EditBridge.field-focused || root.can-redo; activated => { root.command("redo"); } }
+            MenuSeparator { }
             MenuItem { title: "Copy"; shortcut: @keys(Control + "c"); enabled: EditBridge.field-focused || root.has-text-selection || root.has-rect-selection; activated => { root.command("copy"); } }
             MenuItem { title: "Select All"; shortcut: @keys(Control + "a"); enabled: EditBridge.field-focused || root.has-document; activated => { root.command("select-all"); } }
+            MenuItem { title: "Delete"; enabled: root.annot-selected; activated => { root.command("delete"); } }
             MenuSeparator { }
             MenuItem { title: "Find…"; shortcut: @keys(Control + "f"); enabled: root.has-document; activated => { root.command("find"); } }
             MenuItem { title: "Find Next"; shortcut: @keys(Control + "g"); enabled: root.has-search; activated => { root.command("find-next"); } }
@@ -142,6 +191,7 @@ export component MainWindow inherits Window {
             MenuItem { title: "Content Only"; shortcut: @keys(Control + Alt + "1"); activated => { root.command("content-only"); } }
             MenuItem { title: "Thumbnails"; shortcut: @keys(Control + Alt + "2"); enabled: root.has-document; activated => { root.command("sidebar-thumbnails"); } }
             MenuItem { title: "Table of Contents"; shortcut: @keys(Control + Alt + "3"); enabled: root.has-document; activated => { root.command("sidebar-contents"); } }
+            MenuItem { title: "Highlights and Notes"; shortcut: @keys(Control + Alt + "4"); enabled: root.has-document; activated => { root.command("sidebar-notes"); } }
             MenuItem { title: "Bookmarks"; shortcut: @keys(Control + Alt + "5"); enabled: root.has-document; activated => { root.command("sidebar-bookmarks"); } }
             MenuItem { title: "Contact Sheet"; shortcut: @keys(Control + Alt + "6"); checkable: true; checked: root.contact-sheet; enabled: root.has-document; activated => { root.command("contact-sheet"); } }
             MenuItem { title: root.sidebar-visible ? "Hide Sidebar" : "Show Sidebar"; shortcut: @keys(Control + Alt + "s"); activated => { root.command("toggle-sidebar"); } }
@@ -158,6 +208,7 @@ export component MainWindow inherits Window {
             MenuItem { title: "Zoom Out"; shortcut: @keys(Control + "-"); enabled: root.has-document; activated => { root.command("zoom-out"); } }
             MenuSeparator { }
             MenuItem { title: "Slideshow"; shortcut: @keys(Control + Shift + "f"); enabled: root.has-document; activated => { root.command("slideshow"); } }
+            MenuItem { title: root.markup-visible ? "Hide Markup Toolbar" : "Show Markup Toolbar"; shortcut: @keys(Control + Shift + "a"); enabled: root.has-document; activated => { root.command("toggle-markup"); } }
             MenuSeparator { }
             Menu {
                 title: "Appearance";
@@ -179,8 +230,31 @@ export component MainWindow inherits Window {
         }
         Menu {
             title: "Tools";
-            MenuItem { title: "Text Selection"; checkable: true; checked: root.tool == "text"; enabled: root.has-document; activated => { root.command("tool-text"); } }
-            MenuItem { title: "Rectangular Selection"; checkable: true; checked: root.tool == "rect"; enabled: root.has-document; activated => { root.command("tool-rect"); } }
+            MenuItem { title: "Text Selection"; checkable: true; checked: root.tool == "tool-text"; enabled: root.has-document; activated => { root.command("tool-text"); } }
+            MenuItem { title: "Rectangular Selection"; checkable: true; checked: root.tool == "tool-rect"; enabled: root.has-document; activated => { root.command("tool-rect"); } }
+            MenuSeparator { }
+            Menu {
+                title: "Annotate";
+                enabled: root.has-document;
+                MenuItem { title: "Highlight Text"; shortcut: @keys(Control + Alt + "h"); activated => { root.command("highlight"); } }
+                MenuItem { title: "Underline Text"; shortcut: @keys(Control + Alt + "u"); activated => { root.command("underline"); } }
+                MenuItem { title: "Strikethrough Text"; shortcut: @keys(Control + Alt + "k"); activated => { root.command("strikethrough"); } }
+                MenuSeparator { }
+                MenuItem { title: "Rectangle"; shortcut: @keys(Control + Alt + "r"); activated => { root.command("shape-rect"); } }
+                MenuItem { title: "Oval"; shortcut: @keys(Control + Alt + "o"); activated => { root.command("shape-oval"); } }
+                MenuItem { title: "Line"; shortcut: @keys(Control + Alt + "l"); activated => { root.command("shape-line"); } }
+                MenuItem { title: "Arrow"; shortcut: @keys(Control + Alt + "a"); activated => { root.command("shape-arrow"); } }
+                MenuItem { title: "Rounded Rectangle"; activated => { root.command("shape-rounded"); } }
+                MenuItem { title: "Speech Bubble"; activated => { root.command("shape-bubble"); } }
+                MenuItem { title: "Star"; activated => { root.command("shape-star"); } }
+                MenuItem { title: "Loupe"; activated => { root.command("shape-lens"); } }
+                MenuSeparator { }
+                MenuItem { title: "Text"; shortcut: @keys(Control + Alt + "t"); activated => { root.command("tool-textbox"); } }
+                MenuItem { title: "Note"; shortcut: @keys(Control + Alt + "n"); activated => { root.command("tool-note"); } }
+                MenuItem { title: "Sketch"; activated => { root.command("tool-sketch"); } }
+                MenuItem { title: "Draw"; activated => { root.command("tool-draw"); } }
+            }
+            MenuItem { title: "Redact"; shortcut: @keys(Control + Shift + "r"); enabled: root.has-document; activated => { root.command("tool-redact"); } }
             MenuSeparator { }
             MenuItem { title: "Show Magnifier"; shortcut: @keys(Control + "`"); checkable: true; checked: root.loupe-on; enabled: root.has-document; activated => { root.command("toggle-loupe"); } }
             MenuItem { title: "Show Inspector"; shortcut: @keys(Control + "i"); checkable: true; checked: root.inspector-visible; enabled: root.has-document; activated => { root.command("inspector"); } }
@@ -271,6 +345,26 @@ export component MainWindow inherits Window {
                 }
                 VerticalLayout {
                     alignment: center;
+                    IconButton {
+                        icon: Icons.highlight;
+                        tip: "Highlight the selected text (Ctrl+Alt+H)";
+                        enabled: root.has-document;
+                        selected: root.tool == "tool-highlight";
+                        clicked => { root.command("highlight"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.markup;
+                        tip: "Show or hide the Markup toolbar (Ctrl+Shift+A)";
+                        enabled: root.has-document;
+                        selected: root.markup-visible;
+                        clicked => { root.command("toggle-markup"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
                     padding-left: 6px;
                     search := BridgedLineEdit {
                         width: 190px;
@@ -301,6 +395,26 @@ export component MainWindow inherits Window {
                 height: 1px;
                 background: Theme.toolbar-border;
             }
+        }
+
+        if root.markup-visible && root.has-document: MarkupBar {
+            tool: root.tool;
+            has-text-selection: root.has-text-selection;
+            stroke-color: root.markup-stroke;
+            fill-color: root.markup-fill;
+            fill-none: root.markup-fill-none;
+            line-width: root.markup-line-width;
+            dashed: root.markup-dashed;
+            fonts: root.markup-fonts;
+            font: root.markup-font;
+            font-size: root.markup-font-size;
+            text-color: root.markup-text-color;
+            align: root.markup-align;
+            command(id) => { root.command(id); }
+            set-stroke(c) => { root.markup-set-stroke(c); }
+            set-fill(c, n) => { root.markup-set-fill(c, n); }
+            set-line(w, d) => { root.markup-set-line(w, d); }
+            set-text-style(f, s, c, a) => { root.markup-set-text-style(f, s, c, a); }
         }
 
         HorizontalLayout {
@@ -345,6 +459,12 @@ export component MainWindow inherits Window {
                             label: "Bookmarks";
                             empty-text: "No bookmarks. Choose Go > Add Bookmark (Ctrl+D) to mark the current page.";
                             row-clicked(id) => { root.list-row-clicked("bookmarks", id); }
+                        }
+                        if root.sidebar-mode == "notes": RowList {
+                            rows: root.note-rows;
+                            label: "Highlights and notes";
+                            empty-text: "No highlights or notes yet.";
+                            row-clicked(id) => { root.list-row-clicked("notes", id); }
                         }
                         if root.sidebar-mode == "search": RowList {
                             rows: root.search-rows;
@@ -394,6 +514,25 @@ export component MainWindow inherits Window {
                     key(e) => { return root.canvas-key(e); }
                     pointer(k, x, y, s, c, b) => { root.canvas-pointer(k, x, y, s, c, b); }
                     can-copy: root.has-text-selection || root.has-rect-selection;
+                    annot-prims: root.annot-prims;
+                    annot-selected: root.annot-selected;
+                    annot-resizable: root.annot-resizable;
+                    sel-x: root.sel-x;
+                    sel-y: root.sel-y;
+                    sel-w: root.sel-w;
+                    sel-h: root.sel-h;
+                    editing: root.editing;
+                    edit-note: root.edit-note;
+                    edit-x: root.edit-x;
+                    edit-y: root.edit-y;
+                    edit-w: root.edit-w;
+                    edit-h: root.edit-h;
+                    edit-text <=> root.edit-text;
+                    edit-font-size: root.edit-font-size;
+                    edit-font: root.edit-font;
+                    edit-color: root.edit-color;
+                    edit-align: root.edit-align;
+                    edit-finished(t) => { root.edit-finished(t); }
                     context-command(id) => { root.command(id); }
                 }
                 sheet := ContactSheet {
@@ -410,6 +549,16 @@ export component MainWindow inherits Window {
                 closed => { root.command("inspector"); }
             }
         }
+    }
+
+    if root.busy-text != "": Rectangle {
+        x: (root.width - self.width) / 2;
+        y: root.height - 56px;
+        width: busy-label.preferred-width + 28px;
+        height: 30px;
+        border-radius: 15px;
+        background: Theme.dark ? #3a3a3aee : #303030e6;
+        busy-label := Text { text: root.busy-text; color: white; font-size: Theme.font-size; }
     }
 
     if root.prompt-kind != "" || root.shortcuts-visible: Scrim { }

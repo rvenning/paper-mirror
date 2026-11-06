@@ -13,6 +13,9 @@ use crate::pdf::document::PdfDoc;
 use crate::pdf::engine::{DocId, Priority};
 use crate::pdf::ffi::{OpenError, Source};
 
+/// Page sizes, extracted annotations and the password that opened the file.
+type OpenedPdf = (Vec<Size>, Vec<crate::core::annot::Annotation>, Option<String>);
+
 /// Maximum password attempts before the prompt stops reappearing.
 const MAX_PASSWORD_ATTEMPTS: u32 = 5;
 
@@ -96,10 +99,14 @@ impl DocWindow {
         let win = self.id;
         let p = path.clone();
         engine.submit(Priority::Interactive, None, move |st| {
+            let pw = password.clone();
             let result = PdfDoc::open(Source::File(p.clone()), password.as_deref()).map(|doc| {
                 let sizes: Vec<Size> = doc.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
+                // Paper Mirror annotations become editable objects again.
+                let mut next = 0;
+                let annots = crate::pdf::annot_io::extract(&doc, &mut next);
                 st.docs.insert(id, doc);
-                sizes
+                (sizes, annots, pw)
             });
             let _ = slint::invoke_from_event_loop(move || {
                 super::super::with_window(win, |w| w.on_pdf_opened(id, p, result, attempts));
@@ -107,8 +114,8 @@ impl DocWindow {
         });
     }
 
-    fn on_pdf_opened(&self, id: DocId, path: PathBuf, result: Result<Vec<Size>, OpenError>, attempts: u32) {
-        let sizes = match result {
+    fn on_pdf_opened(&self, id: DocId, path: PathBuf, result: Result<OpenedPdf, OpenError>, attempts: u32) {
+        let (sizes, annots, password) = match result {
             Ok(s) => s,
             Err(OpenError::NeedsPassword) => {
                 self.st.borrow_mut().password_for = Some((path.clone(), attempts));
@@ -149,7 +156,10 @@ impl DocWindow {
             st.zoom_mode = ZoomMode::FitWidth;
             st.layout = Default::default();
             st.doc = Some(OpenDoc { id, path: Some(path.clone()), title: title.clone(), sizes: sizes.clone() });
+            st.next_annot_id = annots.iter().map(|a| a.id).max().unwrap_or(0);
+            st.annots = annots;
         }
+        *self.open_password.borrow_mut() = password;
         self.ui.set_doc_title(title.into());
         self.ui.set_has_document(true);
         self.ui.set_has_file(true);
@@ -159,6 +169,7 @@ impl DocWindow {
         self.ui.set_sidebar_mode("thumbnails".into());
         self.load_outline(id);
         self.load_bookmarks();
+        self.refresh_notes_list();
         if self.ui.get_inspector_visible() {
             self.refresh_inspector();
         }

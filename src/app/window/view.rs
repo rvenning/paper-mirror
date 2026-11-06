@@ -166,6 +166,7 @@ impl DocWindow {
         self.ui.set_page_bookmarked(bookmarked);
         self.pages_model.set_vec(items);
         self.overlays_model.set_vec(overlays);
+        self.refresh_annotations();
         self.ensure_links(&visible_pages);
         if page_changed {
             self.refresh_outline_rows();
@@ -527,6 +528,8 @@ impl DocWindow {
             self.go_to_page(usize::MAX);
         } else if is(Key::Escape) {
             return self.escape();
+        } else if is(Key::Delete) || is(Key::Backspace) {
+            return self.delete_selected_annotation();
         } else {
             return false;
         }
@@ -579,5 +582,33 @@ mod tests {
         let (w, h, _) = target_size(Rect::new(0.0, 0.0, 20000.0, 26000.0), 25.0, 1.0);
         assert!(w as u64 * h as u64 <= MAX_PAGE_PIXELS);
         assert!((w as f32 / h as f32 - 20000.0 / 26000.0).abs() < 0.01);
+    }
+}
+
+/// Makes everything outside the inscribed circle transparent (anti-aliased edge).
+/// The software renderer clips to rectangles only, so round images are masked here.
+pub(crate) fn circle_mask(px: &mut [u8], w: u32, h: u32) {
+    let (cx, cy) = (w as f32 / 2.0, h as f32 / 2.0);
+    let r = cx.min(cy);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            let cover = (r - d + 0.5).clamp(0.0, 1.0);
+            if cover < 1.0 {
+                let i = ((y * w + x) * 4 + 3) as usize;
+                px[i] = (px[i] as f32 * cover) as u8;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod mask_tests {
+    #[test]
+    fn corners_become_transparent() {
+        let mut px = vec![255u8; 20 * 20 * 4];
+        super::circle_mask(&mut px, 20, 20);
+        assert_eq!(px[3], 0, "corner");
+        assert_eq!(px[((10 * 20 + 10) * 4 + 3) as usize], 255, "centre");
     }
 }

@@ -1,0 +1,331 @@
+// Markup toolbar and its style popovers, after Preview's Markup toolbar.
+import { ComboBox, SpinBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+import { IconButton, ToolbarSeparator, Swatch, PlainButton } from "controls.slint";
+
+export struct PaletteColor {
+    name: string,
+    value: color,
+    none: bool,
+}
+
+export global MarkupPalette {
+    out property <[PaletteColor]> colors: [
+        { name: "Black", value: #1d1d1d },
+        { name: "White", value: #ffffff },
+        { name: "Red", value: #e5484d },
+        { name: "Orange", value: #f76b15 },
+        { name: "Yellow", value: #ffd60a },
+        { name: "Green", value: #30a46c },
+        { name: "Blue", value: #0a64d6 },
+        { name: "Purple", value: #8e4ec6 },
+        { name: "Grey", value: #8b8d98 },
+    ];
+}
+
+component SwatchGrid inherits VerticalLayout {
+    in property <color> current;
+    in property <bool> allow-none;
+    in property <bool> is-none;
+    callback picked(c: color, none: bool);
+    padding: 10px;
+    spacing: 8px;
+    HorizontalLayout {
+        spacing: 6px;
+        for c in MarkupPalette.colors: Swatch {
+            swatch: c.value;
+            name: c.name;
+            selected: !root.is-none && root.current == c.value;
+            clicked => { root.picked(c.value, false); }
+        }
+    }
+    if root.allow-none: PlainButton {
+        text: "No Fill";
+        clicked => { root.picked(transparent, true); }
+    }
+}
+
+export component MarkupBar inherits Rectangle {
+    in property <string> tool;
+    in property <bool> is-pdf: true;
+    in property <bool> has-text-selection;
+    in property <color> stroke-color;
+    in property <color> fill-color;
+    in property <bool> fill-none;
+    in property <float> line-width;
+    in property <bool> dashed;
+    in property <[string]> fonts;
+    in property <string> font;
+    in property <float> font-size;
+    in property <color> text-color;
+    in property <int> align;
+    callback command(id: string);
+    callback set-stroke(c: color);
+    callback set-fill(c: color, none: bool);
+    callback set-line(width: float, dashed: bool);
+    callback set-text-style(font: string, size: float, color: color, align: int);
+
+    height: Theme.markupbar-height;
+    background: Theme.toolbar-bg;
+    accessible-role: groupbox;
+    accessible-label: "Markup toolbar";
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 2px;
+        alignment: start;
+        for t in [
+            { id: "tool-text", icon: Icons.select-text, tip: "Text selection" },
+            { id: "tool-rect", icon: Icons.select-rect, tip: "Rectangular selection" },
+            { id: "tool-sketch", icon: Icons.sketch, tip: "Sketch: shapes you draw are tidied up" },
+            { id: "tool-draw", icon: Icons.draw, tip: "Draw freehand" },
+        ]: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: t.icon;
+                tip: t.tip;
+                selected: root.tool == t.id;
+                clicked => { root.command(t.id); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            shapes-btn := IconButton {
+                icon: Icons.shapes;
+                tip: "Shapes";
+                selected: root.tool == "tool-shape";
+                clicked => { shapes-pop.show(); }
+            }
+        }
+        for t in [
+            { id: "tool-textbox", icon: Icons.text-box, tip: "Text box" },
+            { id: "tool-highlight", icon: Icons.highlight, tip: "Highlight text" },
+            { id: "tool-signature", icon: Icons.sign, tip: "Signature" },
+            { id: "tool-note", icon: Icons.note, tip: "Note" },
+            { id: "tool-redact", icon: Icons.redact, tip: "Redact: permanently remove content when saved" },
+        ]: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: t.icon;
+                tip: t.tip;
+                visible: root.is-pdf || (t.id != "tool-redact" && t.id != "tool-highlight");
+                selected: root.tool == t.id;
+                clicked => { root.command(t.id); }
+            }
+        }
+        VerticalLayout { alignment: center; padding-left: 4px; padding-right: 4px; ToolbarSeparator { } }
+        VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.line-style; tip: "Shape style"; clicked => { line-pop.show(); } }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.icon-button-size;
+                height: Theme.icon-button-size;
+                border-radius: Theme.radius;
+                background: stroke-touch.has-hover ? Theme.control-hover : transparent;
+                accessible-role: button;
+                accessible-label: "Border colour";
+                accessible-action-default => { stroke-pop.show(); }
+                Rectangle { width: 16px; height: 16px; border-radius: 3px; border-width: 3px; border-color: root.stroke-color; }
+                stroke-touch := TouchArea { clicked => { stroke-pop.show(); } }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: Theme.icon-button-size;
+                height: Theme.icon-button-size;
+                border-radius: Theme.radius;
+                background: fill-touch.has-hover ? Theme.control-hover : transparent;
+                accessible-role: button;
+                accessible-label: "Fill colour";
+                accessible-action-default => { fill-pop.show(); }
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 3px;
+                    background: root.fill-none ? transparent : root.fill-color;
+                    border-width: 1px;
+                    border-color: Theme.separator;
+                    if root.fill-none: Path { commands: "M 1 15 L 15 1"; viewbox-width: 16; viewbox-height: 16; stroke: #e5484d; stroke-width: 1.5px; }
+                }
+                fill-touch := TouchArea { clicked => { fill-pop.show(); } }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.font; tip: "Text style"; clicked => { text-pop.show(); } }
+        }
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.toolbar-border; }
+
+    shapes-pop := PopupWindow {
+        x: shapes-btn.x;
+        y: root.height;
+        width: 250px;
+        height: 96px;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+                for row in [
+                    [
+                        { id: "shape-line", icon: "M3 17 L17 3", tip: "Line" },
+                        { id: "shape-arrow", icon: "M3 17 L16 4 M9 4 H16 V11", tip: "Arrow" },
+                        { id: "shape-rect", icon: "M3 5 H17 V15 H3 Z", tip: "Rectangle" },
+                        { id: "shape-rounded", icon: "M6 5 H14 A3 3 0 0 1 17 8 V12 A3 3 0 0 1 14 15 H6 A3 3 0 0 1 3 12 V8 A3 3 0 0 1 6 5 Z", tip: "Rounded rectangle" },
+                        { id: "shape-oval", icon: "M10 4 A7 6 0 1 1 9.99 4 Z", tip: "Oval" },
+                    ],
+                    [
+                        { id: "shape-bubble", icon: "M4 4 H16 V12 H9 L5 16 V12 H4 Z", tip: "Speech bubble" },
+                        { id: "shape-star", icon: "M10 2.5 L12.2 7.4 L17.5 7.9 L13.5 11.4 L14.7 16.6 L10 13.9 L5.3 16.6 L6.5 11.4 L2.5 7.9 L7.8 7.4 Z", tip: "Star" },
+                        { id: "shape-lens", icon: "M8.5 3.5 A5 5 0 1 1 8.49 3.5 M12.2 12.2 L16.5 16.5 M6.5 8.5 H10.5 M8.5 6.5 V10.5", tip: "Loupe (zoom lens)" },
+                    ],
+                ]: HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+                    for s in row: IconButton {
+                        icon: s.icon;
+                        tip: s.tip;
+                        clicked => { shapes-pop.close(); root.command(s.id); }
+                    }
+                }
+            }
+        }
+    }
+
+    line-pop := PopupWindow {
+        x: 300px;
+        y: root.height;
+        width: 220px;
+        height: 150px;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 2px;
+                for w in [0.5, 1, 2, 4, 8]: Rectangle {
+                    height: 20px;
+                    border-radius: 4px;
+                    background: root.line-width == w ? Theme.control-selected : lw-touch.has-hover ? Theme.control-hover : transparent;
+                    accessible-role: button;
+                    accessible-label: w + " point line";
+                    Rectangle { x: 10px; width: 120px; height: max(1px, w * 1px); background: Theme.text; }
+                    Text { x: 140px; text: w + " pt"; color: Theme.text-secondary; vertical-alignment: center; }
+                    lw-touch := TouchArea { clicked => { root.set-line(w, root.dashed); line-pop.close(); } }
+                }
+                Rectangle {
+                    height: 22px;
+                    border-radius: 4px;
+                    background: dash-touch.has-hover ? Theme.control-hover : transparent;
+                    accessible-role: checkbox;
+                    accessible-label: "Dashed line";
+                    accessible-checked: root.dashed;
+                    Text { x: 10px; text: (root.dashed ? "✓ " : "") + "Dashed"; color: Theme.text; vertical-alignment: center; }
+                    dash-touch := TouchArea { clicked => { root.set-line(root.line-width, !root.dashed); line-pop.close(); } }
+                }
+            }
+        }
+    }
+
+    stroke-pop := PopupWindow {
+        x: 330px;
+        y: root.height;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            SwatchGrid {
+                current: root.stroke-color;
+                picked(c, n) => { root.set-stroke(c); stroke-pop.close(); }
+            }
+        }
+    }
+
+    fill-pop := PopupWindow {
+        x: 360px;
+        y: root.height;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            SwatchGrid {
+                current: root.fill-color;
+                is-none: root.fill-none;
+                allow-none: true;
+                picked(c, n) => { root.set-fill(c, n); fill-pop.close(); }
+            }
+        }
+    }
+
+    text-pop := PopupWindow {
+        x: 390px;
+        y: root.height;
+        width: 300px;
+        height: 170px;
+        close-policy: close-on-click-outside;
+        Rectangle {
+            background: Theme.panel-bg;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.separator;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    font-box := ComboBox {
+                        model: root.fonts;
+                        current-value: root.font;
+                        accessible-label: "Font";
+                        selected(v) => { root.set-text-style(v, root.font-size, root.text-color, root.align); }
+                    }
+                    SpinBox {
+                        width: 80px;
+                        minimum: 4;
+                        maximum: 144;
+                        value: root.font-size;
+                        accessible-label: "Font size";
+                        edited(v) => { root.set-text-style(root.font, v, root.text-color, root.align); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    for c in MarkupPalette.colors: Swatch {
+                        swatch: c.value;
+                        name: c.name;
+                        selected: root.text-color == c.value;
+                        clicked => { root.set-text-style(root.font, root.font-size, c.value, root.align); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+                    for a[i] in [
+                        { icon: "M3 5 H17 M3 9 H12 M3 13 H17 M3 17 H10", tip: "Align left" },
+                        { icon: "M3 5 H17 M5.5 9 H14.5 M3 13 H17 M6.5 17 H13.5", tip: "Centre" },
+                        { icon: "M3 5 H17 M8 9 H17 M3 13 H17 M10 17 H17", tip: "Align right" },
+                    ]: IconButton {
+                        icon: a.icon;
+                        tip: a.tip;
+                        selected: root.align == i;
+                        clicked => { root.set-text-style(root.font, root.font-size, root.text-color, i); }
+                    }
+                }
+            }
+        }
+    }
+}

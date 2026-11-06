@@ -17,6 +17,12 @@ pub struct Color {
     pub a: u8,
 }
 
+impl Default for Color {
+    fn default() -> Self {
+        Color::BLACK
+    }
+}
+
 impl Color {
     pub const BLACK: Color = Color::rgb(0, 0, 0);
     pub const WHITE: Color = Color::rgb(255, 255, 255);
@@ -672,6 +678,97 @@ fn dist_to_segment(p: Point, a: Point, b: Point) -> f32 {
     }
     let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
     p.distance(Point::new(a.x + t * dx, a.y + t * dy))
+}
+
+/// Splits a path into dashes (`on`/`off` lengths) for renderers without dash support.
+/// Curves are flattened first.
+pub fn dash(segs: &[Seg], on: f32, off: f32) -> Vec<Seg> {
+    let mut polylines: Vec<Vec<Point>> = Vec::new();
+    let mut start = Point::default();
+    for seg in segs {
+        match *seg {
+            Seg::Move(p) => {
+                start = p;
+                polylines.push(vec![p]);
+            }
+            Seg::Line(p) => {
+                if let Some(pl) = polylines.last_mut() {
+                    pl.push(p);
+                }
+            }
+            Seg::Cubic(a, b, c) => {
+                if let Some(pl) = polylines.last_mut() {
+                    let p0 = *pl.last().unwrap();
+                    for i in 1..=12 {
+                        let t = i as f32 / 12.0;
+                        let mt = 1.0 - t;
+                        let x =
+                            mt * mt * mt * p0.x + 3.0 * mt * mt * t * a.x + 3.0 * mt * t * t * b.x + t * t * t * c.x;
+                        let y =
+                            mt * mt * mt * p0.y + 3.0 * mt * mt * t * a.y + 3.0 * mt * t * t * b.y + t * t * t * c.y;
+                        pl.push(Point::new(x, y));
+                    }
+                }
+            }
+            Seg::Close => {
+                if let Some(pl) = polylines.last_mut() {
+                    pl.push(start);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for pl in polylines {
+        let mut drawing = true;
+        let mut left = on;
+        let mut pen_down = false;
+        for w in pl.windows(2) {
+            let (mut a, b) = (w[0], w[1]);
+            let mut seg_len = a.distance(b);
+            while seg_len > 1e-4 {
+                let step = left.min(seg_len);
+                let t = step / seg_len;
+                let p = Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+                if drawing {
+                    if !pen_down {
+                        out.push(Seg::Move(a));
+                        pen_down = true;
+                    }
+                    out.push(Seg::Line(p));
+                }
+                seg_len -= step;
+                left -= step;
+                a = p;
+                if left <= 1e-4 {
+                    drawing = !drawing;
+                    pen_down = false;
+                    left = if drawing { on } else { off };
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Bounding box of a path's points and control points.
+pub fn segs_bounds(segs: &[Seg]) -> Option<Rect> {
+    let mut r: Option<Rect> = None;
+    let mut add = |p: Point| {
+        let pr = Rect::new(p.x, p.y, 0.0, 0.0);
+        r = Some(r.map_or(pr, |acc| acc.union(&pr)));
+    };
+    for s in segs {
+        match *s {
+            Seg::Move(p) | Seg::Line(p) => add(p),
+            Seg::Cubic(a, b, c) => {
+                add(a);
+                add(b);
+                add(c);
+            }
+            Seg::Close => {}
+        }
+    }
+    r
 }
 
 /// SVG path commands for `segs` under `t` (for the Slint overlay).

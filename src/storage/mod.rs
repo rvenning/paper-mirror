@@ -1,6 +1,7 @@
 //! Local persistence: settings, recent documents, per-document bookmarks and the
 //! protected signature store. Everything stays on this device.
 
+pub mod originals;
 pub mod settings;
 
 use std::io::Write;

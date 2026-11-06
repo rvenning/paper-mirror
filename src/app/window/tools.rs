@@ -26,19 +26,23 @@ pub(crate) const POINTER_DOUBLE: i32 = 4;
 
 impl DocWindow {
     pub(crate) fn set_tool(&self, tool: Tool) {
+        self.finish_pending_edit();
         {
             let mut st = self.st.borrow_mut();
             st.tool = tool;
             st.drag = None;
+            st.creating = None;
         }
-        self.ui.set_tool(
-            match tool {
-                Tool::Text => "text",
-                Tool::Rect => "rect",
-            }
-            .into(),
-        );
-        self.ui.set_canvas_cursor(if tool == Tool::Rect { "crosshair" } else { "default" }.into());
+        self.ui.set_tool(super::markup::tool_id(tool).into());
+        // Creation tools open the markup toolbar, as in Preview.
+        if !matches!(tool, Tool::Text | Tool::Rect) {
+            self.ui.set_markup_visible(true);
+        }
+        let cursor = match tool {
+            Tool::Text | Tool::Highlight(_) => "default",
+            _ => "crosshair",
+        };
+        self.ui.set_canvas_cursor(cursor.into());
     }
 
     pub(crate) fn toggle_loupe(&self) {
@@ -67,18 +71,24 @@ impl DocWindow {
                 self.st.borrow_mut().drag = None;
                 self.ui.set_loupe_visible(false);
             }
-            POINTER_DOUBLE if self.st.borrow().tool == Tool::Text => self.select_word_at(p),
+            POINTER_DOUBLE
+                if !self.markup_double_click(p) && self.st.borrow().tool.selects_text() => {
+                    self.select_word_at(p);
+                }
             _ => {}
         }
     }
 
     fn pointer_down(&self, p: Point, shift: bool) {
+        if self.markup_pointer_down(p) {
+            return;
+        }
         let caret = self.caret_at_content(p);
         let mut st = self.st.borrow_mut();
         let Some(page) = st.layout.page_at(p).map(|(i, _)| i).or_else(|| st.layout.nearest_page(p)) else { return };
         let pp = clamp_to_page(&st, page, st.layout.to_page(page, p));
         st.drag = Some(Drag { page, start: pp, moved: false });
-        if st.tool == Tool::Text {
+        if st.tool.selects_text() {
             st.link_click = link_under(&st, page, pp).then_some((page, pp));
             // Shift-click extends an existing selection from its anchor.
             st.sel_anchor = match (shift, st.text_sel) {
@@ -93,6 +103,10 @@ impl DocWindow {
     }
 
     fn pointer_move(&self, p: Point) {
+        if self.markup_pointer_move(p) {
+            self.update_hover(p);
+            return;
+        }
         let mut rect_changed = false;
         let mut text_anchor = None;
         {
@@ -110,7 +124,8 @@ impl DocWindow {
                             st.rect_selection = Some((drag.page, Rect::from_points(drag.start, pp)));
                             rect_changed = true;
                         }
-                        Tool::Text => text_anchor = st.sel_anchor,
+                        t if t.selects_text() => text_anchor = st.sel_anchor,
+                        _ => {}
                     }
                 }
                 st.drag = Some(drag);
@@ -121,13 +136,17 @@ impl DocWindow {
             self.refresh_overlays();
         }
         if let Some(anchor) = text_anchor
-            && let Some(focus) = self.caret_at_content(p) {
-                self.set_text_selection(Some(TextSelection { anchor, focus }));
-            }
+            && let Some(focus) = self.caret_at_content(p)
+        {
+            self.set_text_selection(Some(TextSelection { anchor, focus }));
+        }
         self.update_hover(p);
     }
 
     fn pointer_up(&self, p: Point, shift: bool) {
+        if self.markup_pointer_up(p) {
+            return;
+        }
         let (drag, link, tool) = {
             let mut st = self.st.borrow_mut();
             (st.drag.take(), st.link_click.take(), st.tool)
@@ -143,7 +162,7 @@ impl DocWindow {
                 return;
             }
             // A plain click clears selections.
-            if tool == Tool::Text && !shift && self.text_selection().is_some() {
+            if tool.selects_text() && !shift && self.text_selection().is_some() {
                 self.set_text_selection(None);
             }
             let had = self.st.borrow_mut().rect_selection.take().is_some();
@@ -151,6 +170,9 @@ impl DocWindow {
                 self.ui.set_has_rect_selection(false);
                 self.refresh_overlays();
             }
+        } else if let Tool::Highlight(kind) = tool {
+            // In highlight mode, releasing a text drag marks it up immediately.
+            self.apply_markup(kind);
         } else if self.st.borrow().rect_selection.is_some_and(|(_, r)| r.w < 2.0 || r.h < 2.0) {
             self.st.borrow_mut().rect_selection = None;
             self.ui.set_has_rect_selection(false);
@@ -202,12 +224,14 @@ impl DocWindow {
             let st = self.st.borrow();
             let over = st.layout.page_at(p);
             let cursor = match (st.tool, over) {
-                (Tool::Rect, _) => "crosshair",
-                (Tool::Text, Some((page, pp))) if link_under(&st, page, pp) => "pointer",
-                (Tool::Text, Some((page, pp))) if st.page_text.get(&page).is_some_and(|t| t.is_over_text(pp, 1.0)) => {
+                (t, Some((page, pp))) if t.selects_text() && link_under(&st, page, pp) => "pointer",
+                (t, Some((page, pp)))
+                    if t.selects_text() && st.page_text.get(&page).is_some_and(|t| t.is_over_text(pp, 1.0)) =>
+                {
                     "text"
                 }
-                _ => "default",
+                (Tool::Text, _) | (Tool::Highlight(_), _) => "default",
+                (_, _) => "crosshair",
             };
             (cursor, st.loupe_on.then_some(over).flatten())
         };
@@ -249,6 +273,7 @@ impl DocWindow {
                 true,
             );
             if ok {
+                super::view::circle_mask(buf.make_mut_bytes(), size, size);
                 let _ = slint::invoke_from_event_loop(move || {
                     super::super::with_window(win, |w| w.ui.set_loupe_image(Image::from_rgba8(buf)));
                 });
@@ -347,6 +372,18 @@ impl DocWindow {
 
     /// Clears transient tool state (Esc on the canvas).
     pub fn escape(&self) -> bool {
+        if self.st.borrow_mut().creating.take().is_some() {
+            self.refresh_annotations();
+            return true;
+        }
+        if self.st.borrow().selected_annot.is_some() {
+            self.select_annotation(None);
+            return true;
+        }
+        if !matches!(self.st.borrow().tool, Tool::Text) {
+            self.set_tool(Tool::Text);
+            return true;
+        }
         if self.clear_selection() {
             return true;
         }
