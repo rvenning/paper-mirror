@@ -79,10 +79,7 @@ impl DocWindow {
         match kind {
             FileKind::Pdf => self.open_pdf(path, None, 0),
             FileKind::Image(fmt) => self.open_image(path, fmt),
-            FileKind::Model3d(_) => self.error(
-                &format!("“{}” could not be opened.", file_name(&path)),
-                "3D files are not supported in this build.",
-            ),
+            FileKind::Model3d(fmt) => self.open_model(path, fmt),
             FileKind::Unknown => self.error(
                 &format!("“{}” could not be opened.", file_name(&path)),
                 "Paper Mirror can open PDF documents, images and some 3D files. This file is not in a supported format.",

@@ -6,6 +6,7 @@ pub mod core;
 pub mod fixtures;
 pub mod images;
 pub mod installer;
+pub mod model3d;
 pub mod pdf;
 pub mod platform_windows;
 pub mod storage;

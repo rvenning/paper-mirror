@@ -42,6 +42,7 @@ kamadak-exif = "=0.6.2"
 raw-window-handle = "=0.6.2"
 windows-collections = "=0.3.2"
 flate2 = "=1.1.10"
+gltf = { version = "=1.4.1", default-features = false, features = ["utils", "names"] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

@@ -72,6 +72,10 @@ impl DocWindow {
     }
 
     pub(crate) fn viewport_changed(&self) {
+        if self.is_model() {
+            self.model_viewport_changed();
+            return;
+        }
         let vp = self.viewport();
         let (has_doc, last, fit) = {
             let st = self.st.borrow();
@@ -500,6 +504,10 @@ impl DocWindow {
     }
 
     pub(crate) fn wheel_zoom(&self, delta: f32, x: f32, y: f32) {
+        if self.is_model() {
+            self.model_zoom(1.0015f32.powf(-delta));
+            return;
+        }
         let z = self.st.borrow().zoom;
         let nz = layout::clamp_zoom(z * 1.0015f32.powf(delta));
         if (nz - z).abs() > 1e-4 {
@@ -508,6 +516,24 @@ impl DocWindow {
     }
 
     pub(crate) fn canvas_key(&self, e: &slint::language::KeyEvent) -> bool {
+        if self.is_model() {
+            use slint::platform::Key;
+            let k = e.text.chars().next();
+            let step = |key: Key| k == Some(char::from(key));
+            let (dx, dy) = if step(Key::LeftArrow) {
+                (-25.0, 0.0)
+            } else if step(Key::RightArrow) {
+                (25.0, 0.0)
+            } else if step(Key::UpArrow) {
+                (0.0, -25.0)
+            } else if step(Key::DownArrow) {
+                (0.0, 25.0)
+            } else {
+                return false;
+            };
+            self.model_orbit_by(dx, dy);
+            return true;
+        }
         use slint::platform::Key;
         let t = e.text.as_str();
         let vp = self.viewport();

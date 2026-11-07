@@ -23,6 +23,27 @@ impl DocWindow {
     /// File > Export… (`pdf` false) or Export as PDF… (`pdf` true).
     pub(crate) fn show_export(&self, pdf: bool) {
         self.finish_pending_edit();
+        if self.is_model() {
+            let choices = DocWindow::model_export_choices();
+            let names: Vec<SharedString> = choices
+                .iter()
+                .map(|c| match c {
+                    super::model::ModelChoice::Mesh(f) => SharedString::from(f.name()),
+                    super::model::ModelChoice::Image(f) => {
+                        SharedString::from(format!("{} image of the view", f.name()))
+                    }
+                })
+                .collect();
+            self.st.borrow_mut().model_export = choices;
+            self.ui.set_export_formats(ModelRc::new(VecModel::from(names)));
+            self.ui.set_export_format(0);
+            self.ui.set_export_title("Export".into());
+            self.ui.set_export_quality(crate::app::window::imaging::DEFAULT_QUALITY as f32);
+            self.export_format_changed();
+            self.ui.set_export_error(Default::default());
+            self.ui.set_export_visible(true);
+            return;
+        }
         // Images list their own format first; PDFs list PDF first.
         let source = self.image_save_format();
         let mut formats: Vec<Option<SaveFormat>> = Vec::new();
@@ -57,6 +78,14 @@ impl DocWindow {
 
     /// Shows the options that apply to the chosen format.
     pub(crate) fn export_format_changed(&self) {
+        if self.is_model() {
+            let i = self.ui.get_export_format().max(0) as usize;
+            let c = self.st.borrow().model_export.get(i).copied();
+            self.ui.set_export_is_pdf(false);
+            self.ui.set_export_has_resolution(false);
+            self.ui.set_export_has_quality(matches!(c, Some(super::model::ModelChoice::Image(f)) if f.has_quality()));
+            return;
+        }
         let f = self.export_format();
         self.ui.set_export_is_pdf(f.is_none());
         self.ui.set_export_has_quality(f.is_some_and(SaveFormat::has_quality));
@@ -98,6 +127,14 @@ impl DocWindow {
     }
 
     pub(crate) fn export_confirm(&self) {
+        if self.is_model() {
+            let i = self.ui.get_export_format().max(0) as usize;
+            let quality = self.ui.get_export_quality().round().clamp(1.0, 100.0) as u8;
+            if let Some(c) = self.st.borrow().model_export.get(i).copied() {
+                self.model_export_confirm(c, quality);
+            }
+            return;
+        }
         if let Some(format) = self.export_format() {
             self.export_image_confirm(format);
             return;

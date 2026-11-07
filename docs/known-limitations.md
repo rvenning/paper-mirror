@@ -55,3 +55,22 @@ Collected as each milestone lands; M10 reviews the whole list against the final 
   first time they run.
 - There are no automatic updates, because Paper Mirror makes no network requests.
   Running a newer setup updates in place.
+
+## 3D models (ADR 0009)
+- STL, OBJ (with MTL colours), PLY and glTF/GLB are shown. USD/USDZ/USDA/USDC,
+  Alembic, MaterialX and OpenVDB are recognised but not displayed, and each gets an
+  explanation. No maintained local reader exists for them without large C++
+  libraries, and MaterialX and OpenVDB need renderers Paper Mirror doesn't have.
+- The view is drawn on the CPU, with no GPU. Textures, PBR material properties
+  (metal, roughness, transparency), animation, skins and morph targets are ignored;
+  surfaces show vertex or base colours.
+- A model of about 1 million triangles takes about 70 ms per frame while dragging and
+  about 110 ms when still (8-core CPU), so large models orbit at about 15 frames per
+  second.
+- Editing is limited to orientation: Rotate Left/Right about the vertical axis, and
+  Flip Up Axis. Saving writes STL, OBJ, PLY or GLB. A glTF (.gltf) file is saved as
+  GLB, through Save As. Export also writes an image of the view.
+- Models can't be printed directly; export an image of the view first. Markup and
+  measurements aren't available on models.
+- External glTF buffers and OBJ material libraries must sit in the same folder as the
+  model.

@@ -43,6 +43,21 @@ impl DocWindow {
     }
 
     pub(crate) fn refresh_inspector(&self) {
+        if self.is_model() {
+            let mut rows = vec![heading("General"), row("Name", self.title())];
+            if let Some(p) = self.doc_path() {
+                if let Some(dir) = p.parent() {
+                    rows.push(row("Where", dir.display().to_string()));
+                }
+                if let Ok(meta) = std::fs::metadata(&p) {
+                    rows.push(row("Size on disk", format_size(meta.len())));
+                }
+            }
+            rows.push(heading("Model"));
+            rows.extend(self.model_info_rows().into_iter().map(|(k, v)| row(&k, v)));
+            self.info_model.set_vec(rows);
+            return;
+        }
         let Some((doc_id, path, title)) =
             self.st.borrow().doc.as_ref().map(|d| (d.id, d.path.clone(), d.title.clone()))
         else {

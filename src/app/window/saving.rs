@@ -248,6 +248,10 @@ impl DocWindow {
             .show();
         match r {
             rfd::MessageDialogResult::Custom(s) if s == "Save" => {
+                if self.is_model() {
+                    self.save_model(false);
+                    return false;
+                }
                 if self.is_image() {
                     match (self.doc_path(), self.image_save_format()) {
                         (Some(p), Some(_)) => self.save_image_to(p, super::imaging::DEFAULT_QUALITY, AfterSave::Close),

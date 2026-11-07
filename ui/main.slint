@@ -38,6 +38,7 @@ export component MainWindow inherits Window {
     in property <string> busy-text;
     // Images (ADR 0007)
     in property <bool> is-image;
+    in property <bool> is-model;
     in property <bool> has-location;
     in property <bool> location-shown;
     in property <bool> location-removed;
@@ -369,6 +370,7 @@ export component MainWindow inherits Window {
             MenuItem { title: "Crop"; shortcut: @keys(Control + "k"); enabled: root.has-rect-selection; activated => { root.command("crop"); } }
             MenuItem { title: "Flip Horizontal"; enabled: root.is-image; activated => { root.command("flip-horizontal"); } }
             MenuItem { title: "Flip Vertical"; enabled: root.is-image; activated => { root.command("flip-vertical"); } }
+            MenuItem { title: "Flip Up Axis (3D)"; enabled: root.is-model; activated => { root.command("flip-up-axis"); } }
             MenuSeparator { }
             MenuItem { title: "Adjust Color…"; shortcut: @keys(Control + Alt + "c"); enabled: root.is-image; activated => { root.command("adjust-color"); } }
             MenuItem { title: "Adjust Size…"; enabled: root.is-image; activated => { root.command("adjust-size"); } }
@@ -480,7 +482,7 @@ export component MainWindow inherits Window {
                     IconButton {
                         icon: Icons.highlight;
                         tip: "Highlight the selected text (Ctrl+Alt+H)";
-                        enabled: root.has-document && !root.is-image;
+                        enabled: root.has-document && !root.is-image && !root.is-model;
                         selected: root.tool == "tool-highlight";
                         clicked => { root.command("highlight"); }
                     }
@@ -490,7 +492,7 @@ export component MainWindow inherits Window {
                     IconButton {
                         icon: Icons.markup;
                         tip: "Show or hide the Markup toolbar (Ctrl+Shift+A)";
-                        enabled: root.has-document;
+                        enabled: root.has-document && !root.is-model;
                         selected: root.markup-visible;
                         clicked => { root.command("toggle-markup"); }
                     }
@@ -509,7 +511,7 @@ export component MainWindow inherits Window {
                     padding-left: 6px;
                     search := BridgedLineEdit {
                         width: 190px;
-                        enabled: root.has-document;
+                        enabled: root.has-document && !root.is-model;
                         placeholder-text: "Search";
                         accessible-label: "Search document";
                         text <=> root.search-text;
@@ -538,7 +540,7 @@ export component MainWindow inherits Window {
             }
         }
 
-        if root.markup-visible && root.has-document: MarkupBar {
+        if root.markup-visible && root.has-document && !root.is-model: MarkupBar {
             tool: root.tool;
             is-pdf: !root.is-image;
             has-text-selection: root.has-text-selection;
@@ -561,8 +563,9 @@ export component MainWindow inherits Window {
 
         HorizontalLayout {
             Rectangle {
-                width: root.sidebar-visible ? root.sidebar-width : 0px;
-                visible: root.sidebar-visible;
+                // A 3D model has no pages, so no sidebar.
+                width: root.sidebar-visible && !root.is-model ? root.sidebar-width : 0px;
+                visible: root.sidebar-visible && !root.is-model;
                 background: Theme.sidebar-bg;
                 VerticalLayout {
                     SidebarTabs {
@@ -622,7 +625,7 @@ export component MainWindow inherits Window {
                     }
                 }
             }
-            if root.sidebar-visible: Rectangle {
+            if root.sidebar-visible && !root.is-model: Rectangle {
                 width: 1px;
                 background: Theme.separator;
                 accessible-role: none;
@@ -654,6 +657,7 @@ export component MainWindow inherits Window {
                     loupe-image: root.loupe-image;
                     loupe-x: root.loupe-x;
                     loupe-y: root.loupe-y;
+                    zoom-on-wheel: root.is-model;
                     mask-visible: root.mask-visible;
                     mask-image: root.mask-image;
                     mask-x: root.mask-x;

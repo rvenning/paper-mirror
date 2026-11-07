@@ -60,6 +60,10 @@ impl DocWindow {
 
     /// Canvas pointer events in content coordinates.
     pub fn pointer(&self, kind: i32, p: Point, shift: bool, _ctrl: bool, button: i32) {
+        if self.is_model() {
+            self.model_pointer(kind, p, shift, _ctrl, button);
+            return;
+        }
         if !self.has_document() || button != 0 {
             return;
         }

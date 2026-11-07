@@ -83,6 +83,7 @@ pub const COMMANDS: &[CommandInfo] = &[
     c("crop", "Tools", "Crop", Some("Ctrl+K")),
     c("flip-horizontal", "Tools", "Flip Horizontal", None),
     c("flip-vertical", "Tools", "Flip Vertical", None),
+    c("flip-up-axis", "Tools", "Flip Up Axis (3D)", None),
     c("adjust-color", "Tools", "Adjust Color…", Some("Ctrl+Alt+C")),
     c("adjust-size", "Tools", "Adjust Size…", None),
     c("instant-alpha", "Tools", "Instant Alpha", None),

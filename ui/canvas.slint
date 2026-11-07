@@ -83,6 +83,8 @@ export component Canvas inherits Rectangle {
     in property <length> loupe-y;
     in property <length> loupe-size: 220px;
     // Instant Alpha selection overlay (content coordinates).
+    // 3D view: the wheel zooms without Ctrl.
+    in property <bool> zoom-on-wheel;
     in property <bool> mask-visible;
     in property <image> mask-image;
     in property <length> mask-x;
@@ -228,7 +230,7 @@ export component Canvas inherits Rectangle {
             height: max(root.content-height, flick.visible-height);
             mouse-cursor: root.cursor == "pointer" ? MouseCursor.pointer : root.cursor == "text" ? MouseCursor.text : root.cursor == "crosshair" ? MouseCursor.crosshair : root.cursor == "move" ? MouseCursor.move : root.cursor == "grab" ? MouseCursor.grab : root.cursor == "grabbing" ? MouseCursor.grabbing : MouseCursor.default;
             scroll-event(e) => {
-                if e.modifiers.control {
+                if e.modifiers.control || root.zoom-on-wheel {
                     root.ctrl-wheel(e.delta-y / 1px, self.mouse-x - root.scroll-x, self.mouse-y - root.scroll-y);
                     return accept;
                 }

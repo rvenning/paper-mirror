@@ -14,6 +14,7 @@ mod forms;
 mod imaging;
 mod inspector;
 mod markup;
+mod model;
 mod open;
 mod organize;
 mod pages;
@@ -204,6 +205,11 @@ pub(crate) struct ViewState {
     pub export_formats: Vec<Option<crate::images::encode::SaveFormat>>,
     /// A copy being written for File > Share.
     pub share_after_save: Option<PathBuf>,
+    /// The open 3D model (ADR 0009), instead of a PDF or image.
+    pub model: Option<model::ModelState>,
+    pub model_path: Option<PathBuf>,
+    /// Export choices while the Export panel shows a model.
+    pub model_export: Vec<model::ModelChoice>,
 }
 
 pub struct DocWindow {
@@ -457,6 +463,9 @@ impl DocWindow {
 
     /// Dispatches a registered command. Returns false for unknown ids.
     pub fn command(&self, cmd: &str) -> bool {
+        if self.is_model() && self.model_command(cmd) {
+            return true;
+        }
         match cmd {
             "open" => self.choose_and_open(),
             "clear-recent" => {
@@ -493,6 +502,7 @@ impl DocWindow {
             }
             "show-location" => self.show_location(),
             "remove-location" => self.remove_location(),
+            "flip-up-axis" => {}
             "duplicate" => self.duplicate(),
             "revert-saved" => self.revert_to_saved(),
             "revert-original" => self.revert_to_original(),
@@ -593,6 +603,31 @@ impl DocWindow {
         true
     }
 
+    /// Commands that act differently on a 3D model. Returns false to fall through.
+    fn model_command(&self, cmd: &str) -> bool {
+        match cmd {
+            "zoom-in" => self.model_zoom(0.8),
+            "zoom-out" => self.model_zoom(1.25),
+            "zoom-actual" | "zoom-fit-page" | "zoom-fit-width" => self.model_reset_view(),
+            "rotate-left" => self.model_edit(|m| m.rotate_quarter(-1)),
+            "rotate-right" => self.model_edit(|m| m.rotate_quarter(1)),
+            "flip-up-axis" => self.model_edit(|m| m.flip_up_axis()),
+            "save" => self.save_model(false),
+            "save-as" => self.save_model(true),
+            "export" | "export-pdf" => self.show_export(false),
+            "print" => self.error(
+                "3D models can’t be printed directly.",
+                "Choose File > Export… and export an image of the view, then print the image.",
+            ),
+            "share" => match (self.doc_path(), self.is_dirty()) {
+                (Some(p), false) => self.share_now(&p),
+                _ => self.error("Save the model first.", "Sharing sends the saved file."),
+            },
+            _ => return false,
+        }
+        true
+    }
+
     pub fn close(&self) {
         let id = self.id;
         self.end_slideshow();
@@ -642,6 +677,8 @@ impl DocWindow {
         st.original_saved = false;
         st.fields.clear();
         st.thumb_drag = None;
+        st.model = None;
+        st.model_path = None;
         st.last_scroll_y = None;
         st.image = None;
         st.alpha = None;
@@ -674,6 +711,8 @@ impl DocWindow {
         self.sync_undo_ui();
         self.ui.set_contact_sheet(false);
         self.ui.set_is_image(false);
+        self.ui.set_is_model(false);
+        self.ui.set_doc_subtitle(SharedString::new());
         self.ui.set_mask_visible(false);
         self.ui.set_adjust_visible(false);
         self.ui.set_size_visible(false);
@@ -681,15 +720,22 @@ impl DocWindow {
     }
 
     pub fn doc_path(&self) -> Option<PathBuf> {
-        self.st.borrow().doc.as_ref().and_then(|d| d.path.clone())
+        let st = self.st.borrow();
+        st.doc.as_ref().and_then(|d| d.path.clone()).or_else(|| st.model_path.clone())
     }
 
     pub fn title(&self) -> String {
-        self.st.borrow().doc.as_ref().map(|d| d.title.clone()).unwrap_or_else(|| "Untitled".into())
+        let st = self.st.borrow();
+        st.doc
+            .as_ref()
+            .map(|d| d.title.clone())
+            .or_else(|| st.model_path.as_deref().map(file_name))
+            .unwrap_or_else(|| "Untitled".into())
     }
 
     pub fn has_document(&self) -> bool {
-        self.st.borrow().doc.is_some()
+        let st = self.st.borrow();
+        st.doc.is_some() || st.model.is_some()
     }
 
     pub fn current_page(&self) -> usize {
