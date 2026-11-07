@@ -6,6 +6,7 @@ pub mod effects;
 pub mod engine;
 pub mod ffi;
 pub mod forms;
+pub mod imagedoc;
 pub mod outline;
 pub mod pageops;
 pub mod redact;

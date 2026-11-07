@@ -1,0 +1,154 @@
+// Image tools: Adjust Size and Adjust Color panels.
+import { ComboBox, CheckBox, Slider } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { PlainButton, BridgedLineEdit } from "controls.slint";
+
+// Tools > Adjust Size: width, height and resolution in a chosen unit.
+export component AdjustSizePanel inherits Rectangle {
+    in property <[string]> units;
+    in-out property <int> unit;
+    in-out property <string> width-text;
+    in-out property <string> height-text;
+    in-out property <string> resolution;
+    in-out property <bool> proportional: true;
+    in-out property <bool> resample: true;
+    in property <bool> size-editable: true;
+    in property <string> result;
+    callback edited(field: string);
+    callback confirm();
+    callback cancel();
+    width: 380px;
+    height: layout.preferred-height;
+    background: Theme.panel-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.separator;
+    accessible-role: groupbox;
+    accessible-label: "Adjust Size";
+    layout := VerticalLayout {
+        padding: 18px;
+        spacing: 10px;
+        Text { text: "Adjust Size"; font-size: 15px; font-weight: 600; color: Theme.text; }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Width"; width: 80px; color: Theme.text-secondary; vertical-alignment: center; }
+            BridgedLineEdit {
+                text <=> root.width-text;
+                enabled: root.size-editable;
+                accessible-label: "Width";
+                edited => { root.edited("width"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Height"; width: 80px; color: Theme.text-secondary; vertical-alignment: center; }
+            BridgedLineEdit {
+                text <=> root.height-text;
+                enabled: root.size-editable;
+                accessible-label: "Height";
+                edited => { root.edited("height"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Units"; width: 80px; color: Theme.text-secondary; vertical-alignment: center; }
+            ComboBox {
+                model: root.units;
+                current-index <=> root.unit;
+                accessible-label: "Units";
+                selected => { root.edited("unit"); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Resolution"; width: 80px; color: Theme.text-secondary; vertical-alignment: center; }
+            BridgedLineEdit {
+                text <=> root.resolution;
+                accessible-label: "Resolution in pixels per inch";
+                edited => { root.edited("resolution"); }
+            }
+            Text { text: "pixels/inch"; color: Theme.text-secondary; vertical-alignment: center; }
+        }
+        CheckBox { text: "Scale proportionally"; checked <=> root.proportional; toggled => { root.edited("proportional"); } }
+        CheckBox { text: "Resample image"; checked <=> root.resample; toggled => { root.edited("resample"); } }
+        Text { text: "Result: " + root.result; color: Theme.text-secondary; wrap: word-wrap; accessible-role: text; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            PlainButton { text: "Cancel"; clicked => { root.cancel(); } }
+            PlainButton { text: "OK"; primary: true; clicked => { root.confirm(); } }
+        }
+    }
+    FocusScope {
+        key-pressed(e) => {
+            if e.text == Key.Escape { root.cancel(); return accept; }
+            reject
+        }
+    }
+}
+
+component AdjustRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <float> minimum;
+    in property <float> maximum;
+    in-out property <float> value;
+    callback changed();
+    spacing: 8px;
+    Text { text: root.label; width: 82px; color: Theme.text-secondary; vertical-alignment: center; font-size: Theme.font-small; }
+    Slider {
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+        accessible-label: root.label;
+        changed => { root.changed(); }
+    }
+}
+
+// Tools > Adjust Color: live preview; Done applies it to the pixels.
+export component AdjustColorPanel inherits Rectangle {
+    in-out property <float> black;
+    in-out property <float> white: 1;
+    in-out property <float> exposure;
+    in-out property <float> contrast;
+    in-out property <float> saturation: 1;
+    in-out property <float> temperature;
+    in-out property <float> tint;
+    in-out property <float> sepia;
+    in-out property <float> sharpness;
+    callback changed();
+    callback auto-levels();
+    callback reset();
+    callback done();
+    width: 300px;
+    height: layout.preferred-height;
+    background: Theme.panel-bg;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: Theme.separator;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: #00000040;
+    accessible-role: groupbox;
+    accessible-label: "Adjust Color";
+    layout := VerticalLayout {
+        padding: 14px;
+        spacing: 6px;
+        Text { text: "Adjust Color"; font-size: 15px; font-weight: 600; color: Theme.text; }
+        AdjustRow { label: "Black point"; minimum: 0; maximum: 0.9; value <=> root.black; changed => { root.changed(); } }
+        AdjustRow { label: "White point"; minimum: 0.1; maximum: 1; value <=> root.white; changed => { root.changed(); } }
+        AdjustRow { label: "Exposure"; minimum: -2; maximum: 2; value <=> root.exposure; changed => { root.changed(); } }
+        AdjustRow { label: "Contrast"; minimum: -1; maximum: 1; value <=> root.contrast; changed => { root.changed(); } }
+        AdjustRow { label: "Saturation"; minimum: 0; maximum: 2; value <=> root.saturation; changed => { root.changed(); } }
+        AdjustRow { label: "Temperature"; minimum: -1; maximum: 1; value <=> root.temperature; changed => { root.changed(); } }
+        AdjustRow { label: "Tint"; minimum: -1; maximum: 1; value <=> root.tint; changed => { root.changed(); } }
+        AdjustRow { label: "Sepia"; minimum: 0; maximum: 1; value <=> root.sepia; changed => { root.changed(); } }
+        AdjustRow { label: "Sharpness"; minimum: 0; maximum: 1; value <=> root.sharpness; changed => { root.changed(); } }
+        HorizontalLayout {
+            spacing: 8px;
+            padding-top: 4px;
+            PlainButton { text: "Auto Levels"; clicked => { root.auto-levels(); } }
+            PlainButton { text: "Reset All"; clicked => { root.reset(); } }
+            Rectangle { horizontal-stretch: 1; }
+            PlainButton { text: "Done"; primary: true; clicked => { root.done(); } }
+        }
+    }
+}

@@ -82,6 +82,13 @@ export component Canvas inherits Rectangle {
     in property <length> loupe-x;
     in property <length> loupe-y;
     in property <length> loupe-size: 220px;
+    // Instant Alpha selection overlay (content coordinates).
+    in property <bool> mask-visible;
+    in property <image> mask-image;
+    in property <length> mask-x;
+    in property <length> mask-y;
+    in property <length> mask-w;
+    in property <length> mask-h;
     out property <length> view-width: flick.visible-width;
     out property <length> view-height: flick.visible-height;
     out property <bool> hovered: wheel.has-hover;
@@ -248,6 +255,16 @@ export component Canvas inherits Rectangle {
         y: -root.scroll-y;
         width: root.content-width;
         height: root.content-height;
+        if root.mask-visible: Image {
+            x: root.mask-x;
+            y: root.mask-y;
+            width: root.mask-w;
+            height: root.mask-h;
+            source: root.mask-image;
+            image-fit: fill;
+            image-rendering: pixelated;
+            accessible-role: none;
+        }
         FormLayer {
             fields: root.form-fields;
             commit-text(i, t) => { root.field-commit-text(i, t); }

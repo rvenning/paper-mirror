@@ -78,10 +78,7 @@ impl DocWindow {
         };
         match kind {
             FileKind::Pdf => self.open_pdf(path, None, 0),
-            FileKind::Image(fmt) => self.error(
-                &format!("“{}” could not be opened.", file_name(&path)),
-                &format!("{} images are not supported in this build.", fmt.name()),
-            ),
+            FileKind::Image(fmt) => self.open_image(path, fmt),
             FileKind::Model3d(_) => self.error(
                 &format!("“{}” could not be opened.", file_name(&path)),
                 "3D files are not supported in this build.",
@@ -148,15 +145,27 @@ impl DocWindow {
         };
         super::super::measure("document-opened");
         let title = file_name(&path);
-        self.adopt_document(id, Some(path), title, sizes, annots, password);
+        self.adopt_document(id, Some(path), title, sizes, annots, password, None);
     }
 
     /// Opens a document held in memory (File > Duplicate). It has no file until saved.
-    pub fn open_memory(&self, bytes: std::sync::Arc<Vec<u8>>, title: String) {
+    pub(crate) fn open_memory(
+        &self,
+        bytes: std::sync::Arc<Vec<u8>>,
+        title: String,
+        image: Option<super::imaging::ImageMeta>,
+    ) {
         let id = self.engine.new_doc_id();
         let win = self.id;
+        let filter = image
+            .as_ref()
+            .and_then(|m| m.icc.clone())
+            .map(|icc| std::sync::Arc::new(crate::images::DisplayFilter { adjust: None, icc: Some(icc) }));
+        let checkerboard = image.as_ref().is_some_and(|m| m.info.has_alpha);
         self.engine.submit(Priority::Interactive, None, move |st| {
-            let result = PdfDoc::open(Source::Memory(bytes), None).map(|doc| {
+            let result = PdfDoc::open(Source::Memory(bytes), None).map(|mut doc| {
+                doc.filter = filter;
+                doc.checkerboard = checkerboard;
                 let sizes: Vec<Size> = doc.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
                 let mut next = 0;
                 let annots = crate::pdf::annot_io::extract(&doc, &mut next);
@@ -166,7 +175,7 @@ impl DocWindow {
             let _ = slint::invoke_from_event_loop(move || {
                 super::super::with_window(win, |w| match result {
                     Ok((sizes, annots)) => {
-                        w.adopt_document(id, None, title, sizes, annots, None);
+                        w.adopt_document(id, None, title, sizes, annots, None, image);
                         w.mark_dirty();
                     }
                     Err(e) => w.error("The copy could not be opened.", &e.to_string()),
@@ -176,7 +185,8 @@ impl DocWindow {
     }
 
     /// Makes an engine document this window's document.
-    fn adopt_document(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn adopt_document(
         &self,
         id: DocId,
         path: Option<PathBuf>,
@@ -184,13 +194,19 @@ impl DocWindow {
         sizes: Vec<Size>,
         annots: Vec<crate::core::annot::Annotation>,
         password: Option<String>,
+        image: Option<super::imaging::ImageMeta>,
     ) {
         self.release_document();
+        let is_image = image.is_some();
+        self.st.borrow_mut().image = image;
+        self.ui.set_is_image(is_image);
+        self.sync_location_ui();
         {
             let mut st = self.st.borrow_mut();
             st.current_page = 0;
             st.selected = vec![0];
-            st.zoom_mode = ZoomMode::FitWidth;
+            // Images show whole, as Preview does; documents fit the width.
+            st.zoom_mode = if is_image { ZoomMode::FitPage } else { ZoomMode::FitWidth };
             st.layout = Default::default();
             st.doc = Some(OpenDoc { id, path: path.clone(), title: title.clone(), sizes: sizes.clone() });
             st.next_annot_id = annots.iter().map(|a| a.id).max().unwrap_or(0);
@@ -215,6 +231,10 @@ impl DocWindow {
             self.refresh_inspector();
         }
         self.relayout(None);
+        // Small images are not enlarged past Actual Size.
+        if is_image && self.st.borrow().zoom > 1.0 {
+            self.set_zoom_mode(ZoomMode::Custom(1.0), None);
+        }
         self.ui.invoke_focus_canvas();
         let opts = super::super::context().options;
         if let Some(q) = opts.search.as_deref() {

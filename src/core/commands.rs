@@ -20,11 +20,13 @@ const fn c(id: &'static str, menu: &'static str, title: &'static str, shortcut: 
 
 pub const COMMANDS: &[CommandInfo] = &[
     // File
+    c("new-from-clipboard", "File", "New from Clipboard", Some("Ctrl+N")),
     c("open", "File", "Open…", Some("Ctrl+O")),
     c("clear-recent", "File", "Clear Menu", None),
     c("save", "File", "Save", Some("Ctrl+S")),
     c("save-as", "File", "Save As…", Some("Ctrl+Shift+S")),
     c("duplicate", "File", "Duplicate", None),
+    c("export", "File", "Export…", None),
     c("export-pdf", "File", "Export as PDF…", None),
     c("revert-saved", "File", "Revert To Last Saved Version", None),
     c("revert-original", "File", "Revert To Original", None),
@@ -77,6 +79,13 @@ pub const COMMANDS: &[CommandInfo] = &[
     c("rotate-left", "Tools", "Rotate Left", Some("Ctrl+L")),
     c("rotate-right", "Tools", "Rotate Right", Some("Ctrl+R")),
     c("crop", "Tools", "Crop", Some("Ctrl+K")),
+    c("flip-horizontal", "Tools", "Flip Horizontal", None),
+    c("flip-vertical", "Tools", "Flip Vertical", None),
+    c("adjust-color", "Tools", "Adjust Color…", Some("Ctrl+Alt+C")),
+    c("adjust-size", "Tools", "Adjust Size…", None),
+    c("instant-alpha", "Tools", "Instant Alpha", None),
+    c("show-location", "Tools", "Show/Hide Location", None),
+    c("remove-location", "Tools", "Remove Location Info", None),
     c("tool-rect", "Tools", "Rectangular Selection", None),
     c("highlight", "Tools", "Highlight Text", Some("Ctrl+Alt+H")),
     c("underline", "Tools", "Underline Text", Some("Ctrl+Alt+U")),

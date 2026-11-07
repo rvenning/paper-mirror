@@ -77,6 +77,7 @@ pub fn tool_id(t: Tool) -> &'static str {
         Tool::Signature => "tool-signature",
         Tool::Note => "tool-note",
         Tool::Redact => "tool-redact",
+        Tool::InstantAlpha => "tool-alpha",
     }
 }
 
@@ -235,7 +236,7 @@ impl DocWindow {
 
     pub(crate) fn push_undo(&self) {
         let mut st = self.st.borrow_mut();
-        let snap = super::Snapshot { annots: st.annots.clone(), pdf: None };
+        let snap = super::Snapshot { annots: st.annots.clone(), pdf: None, dpi: None };
         st.undo.push(snap);
         if st.undo.len() > UNDO_DEPTH {
             st.undo.remove(0);
@@ -280,7 +281,11 @@ impl DocWindow {
         }
         {
             let mut st = self.st.borrow_mut();
-            let current = super::Snapshot { annots: st.annots.clone(), pdf: None };
+            let dpi = snap.dpi.and(st.image.as_ref().map(|m| m.info.dpi));
+            let current = super::Snapshot { annots: st.annots.clone(), pdf: None, dpi };
+            if let (Some(m), Some(d)) = (st.image.as_mut(), snap.dpi) {
+                m.info.dpi = d;
+            }
             if undo {
                 st.redo.push(current);
             } else {

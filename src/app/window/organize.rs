@@ -164,7 +164,9 @@ impl DocWindow {
                 use slint::ComponentHandle;
                 let Some(p) = rfd::FileDialog::new()
                     .set_title("Insert Pages from File")
+                    .add_filter("PDF documents and images", crate::core::filetype::OPEN_FILTERS[0].1)
                     .add_filter("PDF documents", &["pdf"])
+                    .add_filter("Images", crate::core::filetype::OPEN_FILTERS[2].1)
                     .set_parent(&self.ui.window().window_handle())
                     .pick_file()
                 else {
@@ -184,6 +186,7 @@ impl DocWindow {
             return;
         };
         self.clear_selection();
+        let rect = if self.is_image() { DocWindow::snap_to_pixels(rect) } else { rect };
         self.apply_page_op(PageOp::Crop { page, rect }, None);
     }
 
@@ -197,7 +200,7 @@ impl DocWindow {
         self.engine.submit(Priority::Interactive, None, move |s| {
             let result: OpResult = (|| {
                 let src = match &source {
-                    Some(p) => Some(PdfDoc::open(Source::File(p.clone()), None).map_err(|e| e.to_string())?),
+                    Some(p) => Some(open_source(p)?),
                     None => None,
                 };
                 let mut op = op_engine;
@@ -240,10 +243,12 @@ impl DocWindow {
             other => other,
         };
         let map = op.remap(n_old);
+        self.remap_image_frames(&map, sizes.len());
         {
             let mut st = self.st.borrow_mut();
             let annots = std::mem::take(&mut st.annots);
-            st.undo.push(Snapshot { annots: annots.clone(), pdf: Some(before) });
+            let dpi = st.image.as_ref().map(|m| m.info.dpi);
+            st.undo.push(Snapshot { annots: annots.clone(), pdf: Some(before), dpi });
             st.redo.clear();
             st.annots = annots
                 .into_iter()
@@ -276,5 +281,22 @@ impl DocWindow {
         self.go_to_page(page);
         self.mark_dirty();
         self.sync_undo_ui();
+    }
+}
+
+/// A document to insert pages from: a PDF, or an image (one page per frame).
+fn open_source(p: &std::path::Path) -> Result<PdfDoc, String> {
+    use crate::core::filetype::{self, FileKind, ImageFormat};
+    match filetype::detect_path(p).map_err(|e| e.to_string())? {
+        FileKind::Image(fmt) => {
+            let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+            let decoded = if fmt == ImageFormat::Jpeg2000 {
+                crate::pdf::imagedoc::decode_jpx(&bytes)?
+            } else {
+                crate::images::decode::decode(&bytes, fmt)?
+            };
+            crate::pdf::imagedoc::build(decoded.frames)
+        }
+        _ => PdfDoc::open(Source::File(p.to_path_buf()), None).map_err(|e| e.to_string()),
     }
 }

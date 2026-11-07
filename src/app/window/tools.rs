@@ -68,6 +68,7 @@ impl DocWindow {
             POINTER_MOVE => self.pointer_move(p),
             POINTER_UP => self.pointer_up(p, shift),
             POINTER_CANCEL => {
+                self.alpha_cancel();
                 self.st.borrow_mut().drag = None;
                 self.ui.set_loupe_visible(false);
             }
@@ -79,6 +80,9 @@ impl DocWindow {
     }
 
     fn pointer_down(&self, p: Point, shift: bool) {
+        if self.alpha_pointer_down(p) {
+            return;
+        }
         if self.markup_pointer_down(p) {
             return;
         }
@@ -102,6 +106,9 @@ impl DocWindow {
     }
 
     fn pointer_move(&self, p: Point) {
+        if self.alpha_pointer_move(p) {
+            return;
+        }
         if self.markup_pointer_move(p) {
             self.update_hover(p);
             return;
@@ -143,6 +150,9 @@ impl DocWindow {
     }
 
     fn pointer_up(&self, p: Point, shift: bool) {
+        if self.alpha_pointer_up() {
+            return;
+        }
         if self.markup_pointer_up(p) {
             return;
         }
@@ -371,6 +381,9 @@ impl DocWindow {
 
     /// Clears transient tool state (Esc on the canvas).
     pub fn escape(&self) -> bool {
+        if self.alpha_cancel() {
+            return true;
+        }
         if self.st.borrow_mut().creating.take().is_some() {
             self.refresh_annotations();
             return true;

@@ -1,5 +1,5 @@
 // In-window modal panels: text/password prompt and the keyboard-shortcut reference.
-import { LineEdit, ScrollView, ComboBox, CheckBox } from "std-widgets.slint";
+import { LineEdit, ScrollView, ComboBox, CheckBox, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { PlainButton, BridgedLineEdit } from "controls.slint";
 
@@ -112,8 +112,18 @@ export component ShortcutsPanel inherits Rectangle {
     }
 }
 
-// Export as PDF: effect, size reduction, password protection, flattening.
+// Export: a format, then that format's options (PDF: effect, size reduction, password,
+// flattening; JPEG/HEIC: quality; a PDF page as an image: resolution).
 export component ExportPanel inherits Rectangle {
+    in property <string> title: "Export";
+    in property <[string]> formats;
+    in-out property <int> format;
+    in property <bool> is-pdf: true;
+    in property <bool> has-quality;
+    in-out property <float> quality: 90;
+    in property <bool> has-resolution;
+    in-out property <string> resolution: "150";
+    callback format-changed();
     in property <[string]> effects;
     in-out property <int> effect;
     in-out property <bool> reduce;
@@ -131,12 +141,35 @@ export component ExportPanel inherits Rectangle {
     border-width: 1px;
     border-color: Theme.separator;
     accessible-role: groupbox;
-    accessible-label: "Export as PDF";
+    accessible-label: root.title;
     layout := VerticalLayout {
         padding: 18px;
         spacing: 10px;
-        Text { text: "Export as PDF"; font-size: 15px; font-weight: 600; color: Theme.text; }
+        Text { text: root.title; font-size: 15px; font-weight: 600; color: Theme.text; }
         HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Format"; width: 90px; color: Theme.text-secondary; vertical-alignment: center; }
+            ComboBox {
+                model: root.formats;
+                current-index <=> root.format;
+                accessible-label: "Format";
+                selected => { root.format-changed(); }
+            }
+        }
+        if root.has-quality: HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Quality"; width: 90px; color: Theme.text-secondary; vertical-alignment: center; }
+            Slider { minimum: 10; maximum: 100; value <=> root.quality; accessible-label: "Quality"; }
+            Text { text: Math.round(root.quality); width: 30px; color: Theme.text; vertical-alignment: center; horizontal-alignment: right; }
+        }
+        if root.has-resolution: HorizontalLayout {
+            spacing: 8px;
+            Text { text: "Resolution"; width: 90px; color: Theme.text-secondary; vertical-alignment: center; }
+            BridgedLineEdit { text <=> root.resolution; accessible-label: "Resolution in pixels per inch"; }
+            Text { text: "pixels/inch"; color: Theme.text-secondary; vertical-alignment: center; }
+        }
+        if root.has-resolution: Text { text: "The current page is exported."; color: Theme.text-secondary; font-size: Theme.font-small; }
+        if root.is-pdf: HorizontalLayout {
             spacing: 8px;
             Text { text: "Effect"; width: 90px; color: Theme.text-secondary; vertical-alignment: center; }
             ComboBox {
@@ -145,10 +178,10 @@ export component ExportPanel inherits Rectangle {
                 accessible-label: "PDF effect";
             }
         }
-        CheckBox { text: "Reduce file size (images at 150 ppi)"; checked <=> root.reduce; }
-        CheckBox { text: "Flatten annotations and form fields"; checked <=> root.flatten; }
-        CheckBox { text: "Encrypt with a password"; checked <=> root.encrypt; }
-        if root.encrypt: VerticalLayout {
+        if root.is-pdf: CheckBox { text: "Reduce file size (images at 150 ppi)"; checked <=> root.reduce; }
+        if root.is-pdf: CheckBox { text: "Flatten annotations and form fields"; checked <=> root.flatten; }
+        if root.is-pdf: CheckBox { text: "Encrypt with a password"; checked <=> root.encrypt; }
+        if root.is-pdf && root.encrypt: VerticalLayout {
             spacing: 6px;
             BridgedLineEdit { placeholder-text: "Password"; input-type: InputType.password; text <=> root.password; accessible-label: "Password"; }
             BridgedLineEdit { placeholder-text: "Verify password"; input-type: InputType.password; text <=> root.password2; accessible-label: "Verify password"; }

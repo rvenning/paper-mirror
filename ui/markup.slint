@@ -99,21 +99,42 @@ export component MarkupBar inherits Rectangle {
                 clicked => { shapes-pop.show(); }
             }
         }
-        for t in [
+        // Images have no text, notes or redaction: their list is shorter.
+        for t in (root.is-pdf ? [
             { id: "tool-textbox", icon: Icons.text-box, tip: "Text box" },
             { id: "tool-highlight", icon: Icons.highlight, tip: "Highlight text" },
             { id: "tool-signature", icon: Icons.sign, tip: "Signature" },
             { id: "tool-note", icon: Icons.note, tip: "Note" },
             { id: "tool-redact", icon: Icons.redact, tip: "Redact: permanently remove content when saved" },
-        ]: VerticalLayout {
+        ] : [
+            { id: "tool-textbox", icon: Icons.text-box, tip: "Text box" },
+            { id: "tool-signature", icon: Icons.sign, tip: "Signature" },
+        ]): VerticalLayout {
             alignment: center;
             IconButton {
                 icon: t.icon;
                 tip: t.tip;
-                visible: root.is-pdf || (t.id != "tool-redact" && t.id != "tool-highlight");
                 selected: root.tool == t.id;
                 clicked => { root.command(t.id); }
             }
+        }
+        if !root.is-pdf: VerticalLayout { alignment: center; padding-left: 4px; padding-right: 4px; ToolbarSeparator { } }
+        if !root.is-pdf: VerticalLayout {
+            alignment: center;
+            IconButton {
+                icon: Icons.instant-alpha;
+                tip: "Instant Alpha: drag across a colour to make it transparent";
+                selected: root.tool == "tool-alpha";
+                clicked => { root.command("instant-alpha"); }
+            }
+        }
+        if !root.is-pdf: VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.adjust-color; tip: "Adjust Color (Ctrl+Alt+C)"; clicked => { root.command("adjust-color"); } }
+        }
+        if !root.is-pdf: VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.adjust-size; tip: "Adjust Size"; clicked => { root.command("adjust-size"); } }
         }
         VerticalLayout { alignment: center; padding-left: 4px; padding-right: 4px; ToolbarSeparator { } }
         VerticalLayout {

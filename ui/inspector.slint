@@ -1,7 +1,7 @@
 // Inspector: document / image information shown in a right-hand panel.
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { IconButton } from "controls.slint";
+import { IconButton, PlainButton } from "controls.slint";
 import { Icons } from "icons.slint";
 
 export struct InfoRow {
@@ -13,7 +13,11 @@ export struct InfoRow {
 export component InspectorPanel inherits Rectangle {
     in property <[InfoRow]> rows;
     in property <string> heading: "Info";
+    in property <bool> has-location;
+    in property <bool> location-shown;
+    in property <bool> location-removed;
     callback closed();
+    callback command(id: string);
     width: 290px;
     background: Theme.panel-bg;
     accessible-role: groupbox;
@@ -46,6 +50,21 @@ export component InspectorPanel inherits Rectangle {
                         Text { text: r.value; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; }
                     }
                 }
+            }
+        }
+        if root.has-location: Rectangle { height: 1px; background: Theme.separator; }
+        if root.has-location: HorizontalLayout {
+            padding: 10px;
+            spacing: 8px;
+            PlainButton {
+                text: root.location-shown ? "Hide Location" : "Show Location";
+                enabled: !root.location-removed;
+                clicked => { root.command("show-location"); }
+            }
+            PlainButton {
+                text: "Remove Location";
+                enabled: !root.location-removed;
+                clicked => { root.command("remove-location"); }
             }
         }
     }

@@ -22,6 +22,10 @@ pub struct PdfDoc {
     /// and torn down explicitly in `Drop` so pages close before the form, and the
     /// form before the document.
     form: Option<super::forms::FormEnv>,
+    /// Applied to rendered pixels for display (image colour profile, Adjust Color preview).
+    pub filter: Option<std::sync::Arc<crate::images::DisplayFilter>>,
+    /// Draw a checkerboard behind the page (images with transparency).
+    pub checkerboard: bool,
 }
 
 impl Drop for PdfDoc {
@@ -52,7 +56,7 @@ impl PdfDoc {
     pub fn wrap(doc: Doc, path: Option<PathBuf>, password: Option<String>) -> PdfDoc {
         let sizes = (0..doc.page_count()).map(|i| doc.page_size(i)).collect();
         let form = super::forms::FormEnv::init(&doc);
-        PdfDoc { doc, path, password, sizes, pages: RefCell::new(Vec::new()), form }
+        PdfDoc { doc, path, password, sizes, pages: RefCell::new(Vec::new()), form, filter: None, checkerboard: false }
     }
 
     pub fn form_handle(&self) -> Option<ffi::FPDF_FORMHANDLE> {
@@ -140,7 +144,11 @@ impl PdfDoc {
                 return false;
             }
             unsafe {
-                b().FPDFBitmap_FillRect(bmp, 0, 0, width as c_int, height as c_int, 0xFFFF_FFFF);
+                if self.checkerboard {
+                    fill_checkerboard(pixels, width, height, ox, oy);
+                } else {
+                    b().FPDFBitmap_FillRect(bmp, 0, 0, width as c_int, height as c_int, 0xFFFF_FFFF);
+                }
                 let m = ffi::matrix(scale, 0.0, 0.0, scale, -ox, -oy);
                 let clip = ffi::rectf(0.0, 0.0, width as f32, height as f32);
                 let mut flags = ffi::FPDF_REVERSE_BYTE_ORDER;
@@ -165,6 +173,9 @@ impl PdfDoc {
                 }
                 b().FPDFBitmap_Destroy(bmp);
             }
+            if let Some(f) = &self.filter {
+                f.apply(&mut pixels[..(width * height * 4) as usize], width, height);
+            }
             true
         })
         .unwrap_or(false)
@@ -178,5 +189,18 @@ impl PdfDoc {
         let mut px = vec![0u8; (width * height * 4) as usize];
         self.render(index, scale, 0.0, 0.0, RenderTarget { pixels: &mut px, width, height }, true)
             .then_some((width, height, px))
+    }
+}
+
+/// Light gray 8-pixel checks, aligned to the whole page so tiles line up.
+fn fill_checkerboard(px: &mut [u8], width: u32, height: u32, ox: f32, oy: f32) {
+    let (ox, oy) = (ox.round() as i64, oy.round() as i64);
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let dark = (((x as i64 + ox).div_euclid(8)) + ((y as i64 + oy).div_euclid(8))) % 2 != 0;
+            let v = if dark { 0xDD } else { 0xFF };
+            let i = (y * width as usize + x) * 4;
+            px[i..i + 4].copy_from_slice(&[v, v, v, 0xFF]);
+        }
     }
 }

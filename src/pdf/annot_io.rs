@@ -113,6 +113,8 @@ pub struct SaveOptions {
     pub effect: Option<super::effects::Effect>,
     /// Downsample and recompress images.
     pub reduce_size: bool,
+    /// Write an image file instead of a PDF.
+    pub image: Option<crate::images::encode::ImageTarget>,
 }
 
 /// Serialises `doc` with `annots` (display space) applied.

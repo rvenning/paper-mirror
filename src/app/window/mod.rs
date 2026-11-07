@@ -11,6 +11,7 @@
 
 mod exporting;
 mod forms;
+mod imaging;
 mod inspector;
 mod markup;
 mod open;
@@ -90,6 +91,8 @@ pub enum Tool {
     Signature,
     Note,
     Redact,
+    /// Instant Alpha: drag from a colour to make similar connected pixels transparent.
+    InstantAlpha,
 }
 
 impl Tool {
@@ -104,6 +107,8 @@ impl Tool {
 pub(crate) struct Snapshot {
     pub annots: Vec<Annotation>,
     pub pdf: Option<std::sync::Arc<Vec<u8>>>,
+    /// Image resolution at the time (Adjust Size changes it).
+    pub dpi: Option<(f32, f32)>,
 }
 
 #[derive(Default)]
@@ -184,6 +189,18 @@ pub(crate) struct ViewState {
     /// Anchor for Shift-click range selection of thumbnails.
     pub page_anchor: usize,
     pub thumb_drag: Option<organize::ThumbDrag>,
+    /// Scroll position at the last view update (to tell navigation from scrolling).
+    pub last_scroll_y: Option<f32>,
+    /// Set when the document is an image (ADR 0007).
+    pub image: Option<imaging::ImageMeta>,
+    pub alpha: Option<imaging::AlphaDrag>,
+    pub size_model: Option<crate::core::imagesize::SizeModel>,
+    /// Format of the image save in flight.
+    pub pending_image_format: Option<crate::images::encode::SaveFormat>,
+    /// Resolution before an Adjust Size that resamples (for its undo step).
+    pub pending_dpi_undo: Option<(f32, f32)>,
+    /// Formats listed in the Export panel (None = PDF).
+    pub export_formats: Vec<Option<crate::images::encode::SaveFormat>>,
 }
 
 pub struct DocWindow {
@@ -335,6 +352,14 @@ impl DocWindow {
         self.ui.on_thumb_drag(move |i, y| super::with_window(id, |w| w.thumb_drag(i as usize, y)));
         self.ui.on_thumb_drop(move || super::with_window(id, |w| w.thumb_drop()));
         self.ui.on_export_confirm(move || super::with_window(id, |w| w.export_confirm()));
+        self.ui.on_export_format_changed(move || super::with_window(id, |w| w.export_format_changed()));
+        self.ui.on_size_edited(move |f| super::with_window(id, |w| w.size_edited(f.as_str())));
+        self.ui.on_size_confirm(move || super::with_window(id, |w| w.size_confirm()));
+        self.ui.on_size_cancel(move || super::with_window(id, |w| w.size_cancel()));
+        self.ui.on_adjust_changed(move || super::with_window(id, |w| w.adjust_changed()));
+        self.ui.on_adjust_auto(move || super::with_window(id, |w| w.adjust_auto_levels()));
+        self.ui.on_adjust_reset(move || super::with_window(id, |w| w.adjust_reset()));
+        self.ui.on_adjust_done(move || super::with_window(id, |w| w.adjust_done()));
         self.ui.on_open_recent(move |i| super::with_window(id, |w| w.open_recent(i as usize)));
         self.ui.on_activate_window(move |i| super::activate_window_at(i as usize));
         self.ui.on_prompt_accepted(move |kind, value| {
@@ -441,7 +466,20 @@ impl DocWindow {
             }
             "save" => self.save(false),
             "save-as" => self.save(true),
-            "export-pdf" => self.show_export(),
+            "export-pdf" => self.show_export(true),
+            "export" => self.show_export(false),
+            "new-from-clipboard" => self.new_from_clipboard(),
+            "flip-horizontal" => self.flip(true),
+            "flip-vertical" => self.flip(false),
+            "adjust-size" => self.show_adjust_size(),
+            "adjust-color" => self.show_adjust_color(),
+            "instant-alpha" => {
+                if self.is_image() {
+                    self.set_tool(Tool::InstantAlpha);
+                }
+            }
+            "show-location" => self.show_location(),
+            "remove-location" => self.remove_location(),
             "duplicate" => self.duplicate(),
             "revert-saved" => self.revert_to_saved(),
             "revert-original" => self.revert_to_original(),
@@ -591,6 +629,11 @@ impl DocWindow {
         st.original_saved = false;
         st.fields.clear();
         st.thumb_drag = None;
+        st.last_scroll_y = None;
+        st.image = None;
+        st.alpha = None;
+        st.size_model = None;
+        st.pending_dpi_undo = None;
         drop(st);
         self.render_gen.bump();
         self.thumb_gen.bump();
@@ -617,6 +660,11 @@ impl DocWindow {
         self.forms_model.set_vec(Vec::new());
         self.sync_undo_ui();
         self.ui.set_contact_sheet(false);
+        self.ui.set_is_image(false);
+        self.ui.set_mask_visible(false);
+        self.ui.set_adjust_visible(false);
+        self.ui.set_size_visible(false);
+        self.sync_location_ui();
     }
 
     pub fn doc_path(&self) -> Option<PathBuf> {

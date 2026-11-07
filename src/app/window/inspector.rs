@@ -66,6 +66,14 @@ impl DocWindow {
                             }
                         }
                     }
+                    let image_rows = w.image_info_rows();
+                    if !image_rows.is_empty() {
+                        for (k, v, h) in image_rows {
+                            rows.push(if h { heading(&k) } else { row(&k, v) });
+                        }
+                        w.info_model.set_vec(rows);
+                        return;
+                    }
                     rows.push(row("Pages", info.pages.to_string()));
                     rows.push(row("Page size", format_page_size(info.first_page_size.0, info.first_page_size.1)));
                     rows.push(row("PDF version", info.version.clone()));

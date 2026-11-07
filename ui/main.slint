@@ -10,6 +10,7 @@ import { Scrim, PromptPanel, ShortcutsPanel, ShortcutRow, ExportPanel } from "di
 import { InspectorPanel, InfoRow } from "inspector.slint";
 import { SlideshowWindow } from "slideshow.slint";
 import { FormFieldView, SignatureView, SignaturesPanel } from "forms.slint";
+import { AdjustSizePanel, AdjustColorPanel } from "imagetools.slint";
 
 export { Theme, EditBridge, AnnotPrim, FormFieldView, SignatureView, PageItem, ThumbItem, ListRow, ShortcutRow, OverlayRect, SheetItem, InfoRow, SlideshowWindow }
 
@@ -35,6 +36,37 @@ export component MainWindow inherits Window {
     in property <bool> can-undo;
     in property <bool> can-redo;
     in property <string> busy-text;
+    // Images (ADR 0007)
+    in property <bool> is-image;
+    in property <bool> has-location;
+    in property <bool> location-shown;
+    in property <bool> location-removed;
+    in property <bool> mask-visible;
+    in property <image> mask-image;
+    in property <length> mask-x;
+    in property <length> mask-y;
+    in property <length> mask-w;
+    in property <length> mask-h;
+    in-out property <bool> size-visible;
+    in property <[string]> size-units;
+    in-out property <int> size-unit;
+    in-out property <string> size-width;
+    in-out property <string> size-height;
+    in-out property <string> size-resolution;
+    in-out property <bool> size-proportional: true;
+    in-out property <bool> size-resample: true;
+    in property <bool> size-editable: true;
+    in property <string> size-result;
+    in-out property <bool> adjust-visible;
+    in-out property <float> adjust-black;
+    in-out property <float> adjust-white: 1;
+    in-out property <float> adjust-exposure;
+    in-out property <float> adjust-contrast;
+    in-out property <float> adjust-saturation: 1;
+    in-out property <float> adjust-temperature;
+    in-out property <float> adjust-tint;
+    in-out property <float> adjust-sepia;
+    in-out property <float> adjust-sharpness;
 
     // Markup
     in-out property <bool> markup-visible;
@@ -112,6 +144,14 @@ export component MainWindow inherits Window {
 
     // Export panel
     in-out property <bool> export-visible;
+    in property <string> export-title: "Export";
+    in property <[string]> export-formats;
+    in-out property <int> export-format;
+    in property <bool> export-is-pdf: true;
+    in property <bool> export-has-quality;
+    in-out property <float> export-quality: 90;
+    in property <bool> export-has-resolution;
+    in-out property <string> export-resolution: "150";
     in property <[string]> export-effects;
     in-out property <int> export-effect;
     in-out property <bool> export-reduce;
@@ -183,6 +223,14 @@ export component MainWindow inherits Window {
     callback thumb-drag(index: int, y: length);
     callback thumb-drop();
     callback export-confirm();
+    callback export-format-changed();
+    callback size-edited(field: string);
+    callback size-confirm();
+    callback size-cancel();
+    callback adjust-changed();
+    callback adjust-auto();
+    callback adjust-reset();
+    callback adjust-done();
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
     preferred-width: 1100px;
@@ -195,6 +243,7 @@ export component MainWindow inherits Window {
     MenuBar {
         Menu {
             title: "File";
+            MenuItem { title: "New from Clipboard"; shortcut: @keys(Control + "n"); activated => { root.command("new-from-clipboard"); } }
             MenuItem { title: "Open…"; shortcut: @keys(Control + "o"); activated => { root.command("open"); } }
             Menu {
                 title: "Open Recent";
@@ -203,9 +252,10 @@ export component MainWindow inherits Window {
                 MenuItem { title: "Clear Menu"; enabled: root.recent-files.length > 0; activated => { root.command("clear-recent"); } }
             }
             MenuSeparator { }
-            MenuItem { title: "Save"; shortcut: @keys(Control + "s"); enabled: root.has-file; activated => { root.command("save"); } }
-            MenuItem { title: "Save As…"; shortcut: @keys(Control + Shift + "s"); enabled: root.has-file; activated => { root.command("save-as"); } }
+            MenuItem { title: "Save"; shortcut: @keys(Control + "s"); enabled: root.has-document; activated => { root.command("save"); } }
+            MenuItem { title: "Save As…"; shortcut: @keys(Control + Shift + "s"); enabled: root.has-document; activated => { root.command("save-as"); } }
             MenuItem { title: "Duplicate"; enabled: root.has-document; activated => { root.command("duplicate"); } }
+            MenuItem { title: "Export…"; enabled: root.has-document; activated => { root.command("export"); } }
             MenuItem { title: "Export as PDF…"; enabled: root.has-document; activated => { root.command("export-pdf"); } }
             Menu {
                 title: "Revert To";
@@ -230,7 +280,7 @@ export component MainWindow inherits Window {
             MenuItem { title: "Delete Pages"; enabled: root.has-document && root.multi-page; activated => { root.command("delete-pages"); } }
             Menu {
                 title: "Insert";
-                enabled: root.has-document;
+                enabled: root.has-document && !root.is-image;
                 MenuItem { title: "Blank Page"; activated => { root.command("insert-blank"); } }
                 MenuItem { title: "Pages from File…"; activated => { root.command("insert-file"); } }
             }
@@ -307,12 +357,20 @@ export component MainWindow inherits Window {
                 MenuItem { title: "Sketch"; activated => { root.command("tool-sketch"); } }
                 MenuItem { title: "Draw"; activated => { root.command("tool-draw"); } }
             }
-            MenuItem { title: "Redact"; shortcut: @keys(Control + Shift + "r"); enabled: root.has-document; activated => { root.command("tool-redact"); } }
+            MenuItem { title: "Redact"; shortcut: @keys(Control + Shift + "r"); enabled: root.has-document && !root.is-image; activated => { root.command("tool-redact"); } }
             MenuItem { title: "Signatures…"; enabled: root.has-document; activated => { root.command("tool-signature"); } }
             MenuSeparator { }
             MenuItem { title: "Rotate Left"; shortcut: @keys(Control + "l"); enabled: root.has-document; activated => { root.command("rotate-left"); } }
             MenuItem { title: "Rotate Right"; shortcut: @keys(Control + "r"); enabled: root.has-document; activated => { root.command("rotate-right"); } }
             MenuItem { title: "Crop"; shortcut: @keys(Control + "k"); enabled: root.has-rect-selection; activated => { root.command("crop"); } }
+            MenuItem { title: "Flip Horizontal"; enabled: root.is-image; activated => { root.command("flip-horizontal"); } }
+            MenuItem { title: "Flip Vertical"; enabled: root.is-image; activated => { root.command("flip-vertical"); } }
+            MenuSeparator { }
+            MenuItem { title: "Adjust Color…"; shortcut: @keys(Control + Alt + "c"); enabled: root.is-image; activated => { root.command("adjust-color"); } }
+            MenuItem { title: "Adjust Size…"; enabled: root.is-image; activated => { root.command("adjust-size"); } }
+            MenuItem { title: "Instant Alpha"; checkable: true; checked: root.tool == "tool-alpha"; enabled: root.is-image; activated => { root.command("instant-alpha"); } }
+            MenuItem { title: root.location-shown ? "Hide Location" : "Show Location"; enabled: root.has-location && !root.location-removed; activated => { root.command("show-location"); } }
+            MenuItem { title: "Remove Location Info"; enabled: root.has-location && !root.location-removed; activated => { root.command("remove-location"); } }
             MenuSeparator { }
             MenuItem { title: "Show Magnifier"; shortcut: @keys(Control + "`"); checkable: true; checked: root.loupe-on; enabled: root.has-document; activated => { root.command("toggle-loupe"); } }
             MenuItem { title: "Show Inspector"; shortcut: @keys(Control + "i"); checkable: true; checked: root.inspector-visible; enabled: root.has-document; activated => { root.command("inspector"); } }
@@ -415,7 +473,7 @@ export component MainWindow inherits Window {
                     IconButton {
                         icon: Icons.highlight;
                         tip: "Highlight the selected text (Ctrl+Alt+H)";
-                        enabled: root.has-document;
+                        enabled: root.has-document && !root.is-image;
                         selected: root.tool == "tool-highlight";
                         clicked => { root.command("highlight"); }
                     }
@@ -466,6 +524,7 @@ export component MainWindow inherits Window {
 
         if root.markup-visible && root.has-document: MarkupBar {
             tool: root.tool;
+            is-pdf: !root.is-image;
             has-text-selection: root.has-text-selection;
             stroke-color: root.markup-stroke;
             fill-color: root.markup-fill;
@@ -579,6 +638,12 @@ export component MainWindow inherits Window {
                     loupe-image: root.loupe-image;
                     loupe-x: root.loupe-x;
                     loupe-y: root.loupe-y;
+                    mask-visible: root.mask-visible;
+                    mask-image: root.mask-image;
+                    mask-x: root.mask-x;
+                    mask-y: root.mask-y;
+                    mask-w: root.mask-w;
+                    mask-h: root.mask-h;
                     empty-title: "Open a PDF or image";
                     empty-detail: "Choose File > Open, press Ctrl+O, or drag a file into this window.";
                     viewport-changed => { root.canvas-viewport-changed(); }
@@ -623,7 +688,11 @@ export component MainWindow inherits Window {
             }
             if root.inspector-visible: InspectorPanel {
                 rows: root.info-rows;
+                has-location: root.has-location;
+                location-shown: root.location-shown;
+                location-removed: root.location-removed;
                 closed => { root.command("inspector"); }
+                command(id) => { root.command(id); }
             }
         }
     }
@@ -638,11 +707,55 @@ export component MainWindow inherits Window {
         busy-label := Text { text: root.busy-text; color: white; font-size: Theme.font-size; }
     }
 
-    if root.prompt-kind != "" || root.shortcuts-visible || root.signatures-visible || root.export-visible: Scrim { }
+    if root.prompt-kind != "" || root.shortcuts-visible || root.signatures-visible || root.export-visible || root.size-visible: Scrim { }
+
+    if root.adjust-visible: AdjustColorPanel {
+        x: root.width - self.width - 16px;
+        y: Theme.toolbar-height + 16px;
+        black <=> root.adjust-black;
+        white <=> root.adjust-white;
+        exposure <=> root.adjust-exposure;
+        contrast <=> root.adjust-contrast;
+        saturation <=> root.adjust-saturation;
+        temperature <=> root.adjust-temperature;
+        tint <=> root.adjust-tint;
+        sepia <=> root.adjust-sepia;
+        sharpness <=> root.adjust-sharpness;
+        changed => { root.adjust-changed(); }
+        auto-levels => { root.adjust-auto(); }
+        reset => { root.adjust-reset(); }
+        done => { root.adjust-done(); }
+    }
+
+    if root.size-visible: AdjustSizePanel {
+        x: (root.width - self.width) / 2;
+        y: max(30px, (root.height - self.height) / 3);
+        units: root.size-units;
+        unit <=> root.size-unit;
+        width-text <=> root.size-width;
+        height-text <=> root.size-height;
+        resolution <=> root.size-resolution;
+        proportional <=> root.size-proportional;
+        resample <=> root.size-resample;
+        size-editable: root.size-editable;
+        result: root.size-result;
+        edited(f) => { root.size-edited(f); }
+        confirm => { root.size-confirm(); }
+        cancel => { root.size-cancel(); }
+    }
 
     if root.export-visible: ExportPanel {
         x: (root.width - self.width) / 2;
         y: max(30px, (root.height - self.height) / 3);
+        title: root.export-title;
+        formats: root.export-formats;
+        format <=> root.export-format;
+        is-pdf: root.export-is-pdf;
+        has-quality: root.export-has-quality;
+        quality <=> root.export-quality;
+        has-resolution: root.export-has-resolution;
+        resolution <=> root.export-resolution;
+        format-changed => { root.export-format-changed(); }
         effects: root.export-effects;
         effect <=> root.export-effect;
         reduce <=> root.export-reduce;

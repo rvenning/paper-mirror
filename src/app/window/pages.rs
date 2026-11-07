@@ -31,7 +31,14 @@ impl DocWindow {
                     };
                     {
                         let mut st = w.st.borrow_mut();
-                        let other = Snapshot { annots: current_annots, pdf: Some(previous) };
+                        let other = Snapshot {
+                            annots: current_annots,
+                            pdf: Some(previous),
+                            dpi: st.image.as_ref().map(|m| m.info.dpi),
+                        };
+                        if let (Some(m), Some(dpi)) = (st.image.as_mut(), snap.dpi) {
+                            m.info.dpi = dpi;
+                        }
                         if undo {
                             st.redo.push(other);
                         } else {
@@ -109,13 +116,20 @@ pub(crate) fn swap_document(
     let previous = Arc::new(old.doc.save_to_vec(old.doc.security_revision() != -1).ok_or("save failed")?);
     let path = old.path.clone();
     let password = old.password.clone();
+    let filter = old.filter.clone();
+    let checkerboard = old.checkerboard;
     let mut new = PdfDoc::open(Source::Memory(bytes), None).map_err(|e| e.to_string())?;
     new.path = path;
     new.password = password;
+    new.filter = filter;
+    new.checkerboard = checkerboard;
     let sizes = new.page_sizes().iter().map(|(w, h)| Size::new(*w, *h)).collect();
     s.docs.insert(doc_id, new);
     Ok((previous, sizes))
 }
+
+/// Undo bytes (when small enough to keep) and the page sizes after an edit.
+type EditResult = Result<(Option<Arc<Vec<u8>>>, Vec<Size>), String>;
 
 /// Document edits run on the engine thread; the UI follows up based on the kind.
 #[derive(Clone, Debug)]
@@ -149,12 +163,7 @@ impl DocWindow {
         });
     }
 
-    fn on_document_edited(
-        &self,
-        doc_id: DocId,
-        kind: EditKind,
-        result: Result<(Option<Arc<Vec<u8>>>, Vec<Size>), String>,
-    ) {
+    fn on_document_edited(&self, doc_id: DocId, kind: EditKind, result: EditResult) {
         if self.st.borrow().doc.as_ref().is_none_or(|d| d.id != doc_id) {
             return;
         }
@@ -168,7 +177,8 @@ impl DocWindow {
         if let Some(pdf) = before {
             let annots = self.annotations();
             let mut st = self.st.borrow_mut();
-            st.undo.push(Snapshot { annots, pdf: Some(pdf) });
+            let dpi = st.image.as_ref().map(|m| m.info.dpi);
+            st.undo.push(Snapshot { annots, pdf: Some(pdf), dpi });
             st.redo.clear();
         }
         self.trim_snapshots();

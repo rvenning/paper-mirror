@@ -9,6 +9,13 @@ pub fn fill(buf: &mut [u8]) -> Result<(), String> {
     if status == 0 { Ok(()) } else { Err(format!("BCryptGenRandom failed (0x{status:08x})")) }
 }
 
+/// A random u64 (for unique temporary names).
+pub fn u64() -> Result<u64, String> {
+    let mut b = [0u8; 8];
+    fill(&mut b)?;
+    Ok(u64::from_le_bytes(b))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

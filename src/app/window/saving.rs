@@ -23,6 +23,10 @@ impl DocWindow {
     /// Save (in place) or Save As. Redactions ask first and default to a new file.
     pub(crate) fn save(&self, save_as: bool) {
         self.finish_pending_edit();
+        if self.is_image() {
+            self.save_image(save_as);
+            return;
+        }
         // An untitled document (Duplicate) is saved with Save As.
         let (path, mut save_as) = match self.doc_path() {
             Some(p) => (p, save_as),
@@ -134,7 +138,10 @@ impl DocWindow {
                 for (p, rs) in by_page {
                     redact::redact_page(doc, p, &rs)?;
                 }
-                let bytes = annot_io::save(doc, &annots, &opts)?;
+                let bytes = match &opts.image {
+                    Some(target) => crate::pdf::imagedoc::export(doc, &annots, target)?,
+                    None => annot_io::save(doc, &annots, &opts)?,
+                };
                 crate::storage::write_atomic(&target, &bytes).map_err(|e| e.to_string())?;
                 Ok(())
             })();
@@ -150,9 +157,11 @@ impl DocWindow {
             return;
         }
         if let Err(e) = result {
+            self.st.borrow_mut().pending_image_format = None;
             self.error(&format!("“{}” couldn’t be saved.", file_name(&target)), &e);
             return;
         }
+        self.after_image_saved(copy);
         let had_redactions = self.has_redactions();
         {
             let mut st = self.st.borrow_mut();
@@ -234,6 +243,13 @@ impl DocWindow {
             .show();
         match r {
             rfd::MessageDialogResult::Custom(s) if s == "Save" => {
+                if self.is_image() {
+                    match (self.doc_path(), self.image_save_format()) {
+                        (Some(p), Some(_)) => self.save_image_to(p, super::imaging::DEFAULT_QUALITY, AfterSave::Close),
+                        _ => self.save_image(true),
+                    }
+                    return false;
+                }
                 let Some(path) = self.doc_path() else { return false };
                 let target = if self.has_redactions() {
                     match self.choose_save_path(&path, &redacted_name(&path)) {

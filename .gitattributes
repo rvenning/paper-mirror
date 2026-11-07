@@ -11,3 +11,4 @@
 *.stl binary
 *.ply binary
 *.sh text eol=lf
+*.j2k binary

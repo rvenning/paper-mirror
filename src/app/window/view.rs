@@ -110,11 +110,20 @@ impl DocWindow {
             doc_id = doc.id;
             let n = doc.sizes.len();
             let visible = st.layout.visible(scroll.y - OVERSCAN, scroll.y + vp.h + OVERSCAN);
-            current = if st.mode == DisplayMode::SinglePage {
-                st.current_page
+            // The page chosen by navigation stays current until the user scrolls
+            // (when every page fits, scrolling never happens at all).
+            let unscrolled = st.last_scroll_y == Some(scroll.y)
+                && st
+                    .layout
+                    .rects
+                    .get(st.current_page)
+                    .is_some_and(|r| r.intersects(&Rect::new(scroll.x, scroll.y, vp.w, vp.h)));
+            current = if st.mode == DisplayMode::SinglePage || unscrolled {
+                st.current_page.min(n.saturating_sub(1))
             } else {
                 st.layout.current_page(scroll.y, vp.h)
             };
+            st.last_scroll_y = Some(scroll.y);
             page_changed = st.list_page != Some(current);
             st.list_page = Some(current);
             st.current_page = current;
@@ -449,7 +458,9 @@ impl DocWindow {
             self.ui.invoke_scroll_canvas_to(0.0, 0.0);
             self.update_view();
         } else {
-            let y = self.st.borrow().layout.scroll_to_page(page);
+            // Never past the end: when every page fits, there is nothing to scroll.
+            let max_y = (self.st.borrow().layout.content.h - self.viewport().h).max(0.0);
+            let y = self.st.borrow().layout.scroll_to_page(page).min(max_y);
             self.ui.invoke_scroll_canvas_to(self.scroll().x, y);
             self.update_view();
         }

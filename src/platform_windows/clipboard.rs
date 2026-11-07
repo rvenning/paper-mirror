@@ -105,9 +105,83 @@ pub fn set_image(width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
     put(CF_DIB, &rgba_to_dib(width, height, rgba))
 }
 
+/// Decodes a packed DIB (24- or 32-bit, BI_RGB or BI_BITFIELDS) into RGBA.
+pub fn dib_to_rgba(dib: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let u32_at = |i: usize| dib.get(i..i + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let header = u32_at(0)? as usize;
+    if !(40..=124).contains(&header) {
+        return None;
+    }
+    let width = u32_at(4)? as i32;
+    let height = u32_at(8)? as i32;
+    let bits = u16::from_le_bytes([*dib.get(14)?, *dib.get(15)?]);
+    let compression = u32_at(16)?;
+    let used_colours = u32_at(32)? as usize;
+    if width <= 0 || height == 0 || !(bits == 24 || bits == 32) || !(compression == 0 || compression == 3) {
+        return None;
+    }
+    let (w, h) = (width as u32, height.unsigned_abs());
+    if w > 40_000 || h > 40_000 || w as u64 * h as u64 > 250_000_000 {
+        return None;
+    }
+    let masks_after_header = if compression == 3 && header == 40 { 12 } else { 0 };
+    let offset = header + masks_after_header + used_colours * 4;
+    let stride = ((w as usize * bits as usize).div_ceil(32)) * 4;
+    let data = dib.get(offset..offset + stride * h as usize)?;
+    let mut rgba = vec![0u8; w as usize * h as usize * 4];
+    let bpp = bits as usize / 8;
+    for y in 0..h as usize {
+        // Positive height: rows are stored bottom-up.
+        let src_row = if height > 0 { h as usize - 1 - y } else { y };
+        let line = &data[src_row * stride..src_row * stride + w as usize * bpp];
+        for x in 0..w as usize {
+            let p = &line[x * bpp..x * bpp + bpp];
+            let a = if bpp == 4 { p[3] } else { 255 };
+            rgba[(y * w as usize + x) * 4..][..4].copy_from_slice(&[p[2], p[1], p[0], a]);
+        }
+    }
+    // Many programs leave the fourth byte of 32-bit DIBs at zero: that means opaque.
+    if bpp == 4 && rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
+        rgba.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[3] = 255);
+    }
+    Some((w, h, rgba))
+}
+
+/// The image on the clipboard, if any (as RGBA).
+pub fn get_image() -> Option<(u32, u32, Vec<u8>)> {
+    if unsafe { IsClipboardFormatAvailable(CF_DIB) } == 0 {
+        return None;
+    }
+    open().ok()?;
+    let bytes = unsafe {
+        let h = GetClipboardData(CF_DIB);
+        if h.is_null() {
+            None
+        } else {
+            let p = GlobalLock(h as _) as *const u8;
+            if p.is_null() {
+                None
+            } else {
+                let v = std::slice::from_raw_parts(p, GlobalSize(h as _)).to_vec();
+                GlobalUnlock(h as _);
+                Some(v)
+            }
+        }
+    };
+    unsafe { CloseClipboard() };
+    dib_to_rgba(&bytes?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dib_round_trip() {
+        let rgba = [255, 0, 0, 255, 0, 255, 0, 128, 1, 2, 3, 255, 4, 5, 6, 0];
+        assert_eq!(dib_to_rgba(&rgba_to_dib(2, 2, &rgba)), Some((2, 2, rgba.to_vec())));
+        assert!(dib_to_rgba(b"short").is_none());
+    }
 
     #[test]
     fn dib_layout() {
