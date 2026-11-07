@@ -9,6 +9,7 @@ pub mod forms;
 pub mod imagedoc;
 pub mod outline;
 pub mod pageops;
+pub mod print;
 pub mod redact;
 pub mod security;
 pub mod text;

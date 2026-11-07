@@ -5,6 +5,7 @@ pub mod core;
 #[doc(hidden)]
 pub mod fixtures;
 pub mod images;
+pub mod installer;
 pub mod pdf;
 pub mod platform_windows;
 pub mod storage;

@@ -41,3 +41,17 @@ Collected as each milestone lands; M10 reviews the whole list against the final 
   together with Windows+Shift+S for screenshots.
 - The largest image accepted is 40,000 pixels per side and 250 megapixels per frame
   (400 megapixels across all frames).
+
+## Windows integration and packaging (ADR 0008)
+- Printing uses the Windows Print dialog. Preview's extra print options (scale
+  percentage, several pages per sheet, layout direction) are not offered. Pages are
+  fitted to the paper and centred, and the driver handles copies and collation.
+- The Share sheet and the Print dialog are system UI that the automated tests can't
+  drive, and they haven't yet been checked by hand. The tests cover what Paper Mirror
+  sends to them.
+- Windows doesn't let programs make themselves the default. Paper Mirror registers
+  itself and opens Settings > Default apps, where you choose.
+- The installer and program aren't code-signed, so SmartScreen shows a warning the
+  first time they run.
+- There are no automatic updates, because Paper Mirror makes no network requests.
+  Running a newer setup updates in place.

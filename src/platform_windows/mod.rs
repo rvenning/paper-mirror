@@ -1,10 +1,13 @@
 //! Windows integration: process metrics, dialogs and shell services. Everything that
 //! calls Win32 directly lives under this module.
 
+pub mod assoc;
 pub mod clipboard;
 pub mod dpapi;
 pub mod memory;
+pub mod print_dialog;
 pub mod random;
+pub mod share;
 pub mod shell;
 pub mod wic;
 

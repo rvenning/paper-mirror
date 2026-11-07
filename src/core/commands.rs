@@ -31,6 +31,8 @@ pub const COMMANDS: &[CommandInfo] = &[
     c("revert-saved", "File", "Revert To Last Saved Version", None),
     c("revert-original", "File", "Revert To Original", None),
     c("lock", "File", "Lock/Unlock", None),
+    c("share", "File", "Share…", None),
+    c("print", "File", "Print…", Some("Ctrl+P")),
     c("close", "File", "Close Window", Some("Ctrl+W")),
     c("show-in-explorer", "File", "Show in File Explorer", None),
     // Edit
@@ -113,6 +115,8 @@ pub const COMMANDS: &[CommandInfo] = &[
     // Help
     c("shortcuts", "Help", "Keyboard Shortcuts", Some("F1")),
     c("about", "Help", "About Paper Mirror", None),
+    c("register-file-types", "Help", "Use Paper Mirror for PDFs and Images…", None),
+    c("unregister-file-types", "Help", "Remove File Type Registration…", None),
     c("show-notices", "Help", "Third-party Notices", None),
 ];
 

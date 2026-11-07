@@ -56,6 +56,27 @@ pub fn open_url(url: &str) {
     };
 }
 
+/// Opens Settings > Default apps at this app's page (Windows 11), or the general
+/// Default apps page.
+pub fn open_default_apps(app_name: &str) {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let encoded: String = app_name.chars().map(|c| if c == ' ' { "%20".to_string() } else { c.to_string() }).collect();
+    let uri = format!("ms-settings:defaultapps?registeredAppUser={encoded}");
+    let verb: Vec<u16> = "open".encode_utf16().chain(std::iter::once(0)).collect();
+    let target: Vec<u16> = uri.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_safe_url;

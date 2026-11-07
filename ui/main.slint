@@ -233,6 +233,7 @@ export component MainWindow inherits Window {
     callback adjust-done();
 
     title: has-document ? (edited ? doc-title + " — Edited" : doc-title) : "Paper Mirror";
+    icon: @image-url("../assets/icon-256.png");
     preferred-width: 1100px;
     preferred-height: 820px;
     min-width: 560px;
@@ -266,6 +267,9 @@ export component MainWindow inherits Window {
             MenuItem { title: root.locked ? "Unlock" : "Lock"; enabled: root.has-file; activated => { root.command("lock"); } }
             MenuSeparator { }
             MenuItem { title: "Show in File Explorer"; enabled: root.has-file; activated => { root.command("show-in-explorer"); } }
+            MenuSeparator { }
+            MenuItem { title: "Share…"; enabled: root.has-document; activated => { root.command("share"); } }
+            MenuItem { title: "Print…"; shortcut: @keys(Control + "p"); enabled: root.has-document; activated => { root.command("print"); } }
             MenuSeparator { }
             MenuItem { title: "Close Window"; shortcut: @keys(Control + "w"); activated => { root.command("close"); } }
         }
@@ -390,6 +394,9 @@ export component MainWindow inherits Window {
         Menu {
             title: "Help";
             MenuItem { title: "Keyboard Shortcuts"; shortcut: @keys(F1); activated => { root.command("shortcuts"); } }
+            MenuItem { title: "Use Paper Mirror for PDFs and Images…"; activated => { root.command("register-file-types"); } }
+            MenuItem { title: "Remove File Type Registration…"; activated => { root.command("unregister-file-types"); } }
+            MenuSeparator { }
             MenuItem { title: "Third-party Notices"; activated => { root.command("show-notices"); } }
             MenuSeparator { }
             MenuItem { title: "About Paper Mirror"; activated => { root.command("about"); } }
@@ -486,6 +493,15 @@ export component MainWindow inherits Window {
                         enabled: root.has-document;
                         selected: root.markup-visible;
                         clicked => { root.command("toggle-markup"); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton {
+                        icon: Icons.share;
+                        tip: "Share";
+                        enabled: root.has-document;
+                        clicked => { root.command("share"); }
                     }
                 }
                 VerticalLayout {

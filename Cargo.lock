@@ -3399,6 +3399,7 @@ dependencies = [
 name = "paper-mirror"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "i-slint-backend-testing",
  "image",
  "kamadak-exif",
@@ -3406,6 +3407,7 @@ dependencies = [
  "moxcms",
  "pdfium-render",
  "png",
+ "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",
@@ -3413,6 +3415,8 @@ dependencies = [
  "slint-build",
  "tiff",
  "ttf-parser",
+ "windows",
+ "windows-collections",
  "windows-sys 0.61.2",
 ]
 

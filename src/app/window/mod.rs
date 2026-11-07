@@ -17,6 +17,7 @@ mod markup;
 mod open;
 mod organize;
 mod pages;
+mod platform;
 mod saving;
 mod selection;
 mod sheet;
@@ -201,6 +202,8 @@ pub(crate) struct ViewState {
     pub pending_dpi_undo: Option<(f32, f32)>,
     /// Formats listed in the Export panel (None = PDF).
     pub export_formats: Vec<Option<crate::images::encode::SaveFormat>>,
+    /// A copy being written for File > Share.
+    pub share_after_save: Option<PathBuf>,
 }
 
 pub struct DocWindow {
@@ -234,6 +237,10 @@ pub struct DocWindow {
     pub last_copied: RefCell<Option<String>>,
     /// Last file written by a save (kept for tests).
     pub last_saved: RefCell<Option<PathBuf>>,
+    /// Last print result (kept for tests).
+    pub last_printed: RefCell<Option<Result<usize, String>>>,
+    /// Last file handed to the Share sheet (kept for tests).
+    pub last_shared: RefCell<Option<PathBuf>>,
     /// Password the document was opened with, kept in memory only so a re-save stays
     /// protected. Never written to disk or logs.
     pub(crate) open_password: RefCell<Option<String>>,
@@ -299,6 +306,8 @@ impl DocWindow {
             last_opened_link: RefCell::new(None),
             last_copied: RefCell::new(None),
             last_saved: RefCell::new(None),
+            last_printed: RefCell::new(None),
+            last_shared: RefCell::new(None),
             open_password: RefCell::new(None),
         });
         w.ui.set_pages(ModelRc::from(w.pages_model.clone()));
@@ -464,6 +473,10 @@ impl DocWindow {
                     crate::platform_windows::shell::reveal_in_explorer(&p);
                 }
             }
+            "print" => self.print(),
+            "share" => self.share(),
+            "register-file-types" => self.register_file_types(),
+            "unregister-file-types" => self.unregister_file_types(),
             "save" => self.save(false),
             "save-as" => self.save(true),
             "export-pdf" => self.show_export(true),

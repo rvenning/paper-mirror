@@ -193,6 +193,11 @@ impl DocWindow {
             super::super::update_settings(|s| s.add_recent(&target));
             super::super::refresh_window_menus();
         }
+        let share = copy && self.st.borrow().share_after_save.as_ref() == Some(&target);
+        if share {
+            self.st.borrow_mut().share_after_save = None;
+            self.share_now(&target);
+        }
         *self.last_saved.borrow_mut() = Some(target);
         self.refresh_annotations();
         if after == AfterSave::Close {
