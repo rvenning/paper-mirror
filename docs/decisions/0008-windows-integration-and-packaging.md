@@ -9,9 +9,22 @@ administrator rights, no services or auto-start, no network access, nothing take
 over without the user's say, and no extra build tools beyond the D: toolchain.
 
 ## Decision
-1. **Printing.** The Windows Print dialog (`PrintDlgEx`) picks the printer, copies,
-   collation and range (all, current page, selection, page numbers); the driver handles
-   copies. On the engine thread, markup is flattened into a copy of the document. PDFium's
+1. **Printing.** The classic Windows Print dialog (`PrintDlg`) picks the printer,
+   copies, collation and range (all, one page range, or the thumbnail selection); the
+   driver handles copies. Three problems were found by driving the real UI on the
+   development PC, and shaped this design:
+   - `PrintDlgEx`, the newer dialog, never appeared and froze the window on a PC with
+     an offline network (WSD) printer. `PrintDlg` opens at once.
+   - Owned by the winit window, `PrintDlg` also never appeared. It runs unowned on its
+     own short-lived thread instead, and Paper Mirror's window is disabled meanwhile,
+     which keeps it modal. The window keeps repainting.
+   - Drivers that write a file (port `PORTPROMPT:` or `FILE:`, such as Microsoft Print
+     to PDF and the XPS writer, or with "Print to file" ticked) would ask for a name
+     inside `StartDoc` on the engine thread, where the prompt can't appear. Paper
+     Mirror reads the port from the dialog, asks with its own save dialog on the UI
+     thread, and passes the path to `StartDoc`.
+
+   On the engine thread, markup is flattened into a copy of the document. PDFium's
    `FPDF_RenderPage` then draws each page straight into the printer device context, so
    text and vectors stay sharp. The function is looked up in the loaded `pdfium.dll`.
    Pages shrink to fit the printable area (images also enlarge), are centred, and turn
@@ -49,13 +62,21 @@ over without the user's say, and no extra build tools beyond the D: toolchain.
 
 ## Dependencies
 `windows` 0.62.2 (MIT OR Apache-2.0) for the COM and WinRT interfaces `windows-sys`
-lacks (PrintDlgEx, DataTransferManager, IShellLinkW), plus `windows-collections` 0.3.2,
+lacks (PrintDlg, DataTransferManager, IShellLinkW), plus `windows-collections` 0.3.2,
 `raw-window-handle` 0.6.2 and `flate2` 1.1.10. All four were already in the dependency
 tree through Slint and `png`, so no new code is downloaded.
 
 ## Consequences
 The executables are unsigned, so SmartScreen warns on first run until a code-signing
-certificate is used. The Print dialog and Share sheet are system UI that automated tests can't drive, so
-they need checking by hand. Automated tests cover print output, page ranges, share-copy preparation,
-registration and install/update/uninstall, all under scratch registry keys and
-temporary folders.
+certificate is used. Automated tests cover print output, page ranges, file ports,
+share-copy preparation, registration and install/update/uninstall, all under scratch
+registry keys and temporary folders.
+
+The Print dialog and Share sheet are system UI that the test suite doesn't drive.
+They were checked on 2026-11-07 by driving the release build through Windows UI
+Automation:
+- Ctrl+P opened the Print dialog in about a second. OK on Microsoft Print to PDF
+  brought up "Save Print Output As", and the saved file held all three pages.
+- After Print, File > Open still opened normally.
+- The toolbar's Share button opened the Windows 11 Share sheet ("You are sharing
+  check.pdf", with Copy, sharing to people, app targets and Nearby Sharing).

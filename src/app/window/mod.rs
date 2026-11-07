@@ -205,6 +205,8 @@ pub(crate) struct ViewState {
     pub export_formats: Vec<Option<crate::images::encode::SaveFormat>>,
     /// A copy being written for File > Share.
     pub share_after_save: Option<PathBuf>,
+    /// The Print dialog is open (on its own thread).
+    pub printing: bool,
     /// The open 3D model (ADR 0009), instead of a PDF or image.
     pub model: Option<model::ModelState>,
     pub model_path: Option<PathBuf>,

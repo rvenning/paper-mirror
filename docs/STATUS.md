@@ -1,6 +1,6 @@
 # Build status (2026-11-07)
 
-All milestones M0–M10 are built and verified: 163 automated tests (114 unit tests,
+All milestones M0–M10 are built and verified: 164 automated tests (115 unit tests,
 plus 49 backend, integration and headless UI tests, many of them end-to-end), with
 clippy and rustfmt clean. Each requirement's status and evidence is in
 `docs/feature-checklist.md`; gaps are in `docs/known-limitations.md`.
@@ -37,4 +37,5 @@ in `D:\rust`; PDFium via `scripts/fetch-pdfium.ps1`.
 - Choose a licence for Paper Mirror's own code. None has been chosen, and the brief
   doesn't name one.
 - Code-sign the installer and executable to avoid SmartScreen warnings.
-- Check by hand: the Print dialog, the Share sheet, touch and pen input, and Narrator.
+- Check by hand: touch and pen input, and Narrator. (The Print dialog and Share sheet
+  were checked through the real UI on 2026-11-07; see ADR 0008.)

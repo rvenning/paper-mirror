@@ -50,8 +50,8 @@ test inside `src/`.
 | Password protection (AES-256) | Done | pdf_annotations `saving_with_protection_and_preserving_encryption`, pdf_backend `encrypted_bytes_do_not_contain_plain_text` |
 | Save, Save As, Export, Duplicate, Revert To Last Saved/Original, Lock | Done | ui_pages, ui_markup |
 | Original kept before the first overwrite | Done | ui_markup, ui_images |
-| Print (Windows Print dialog) | Done | pdf_print `prints_selected_pages_to_a_pdf_printer`, ui_platform `print_and_share`; the dialog itself still needs a manual check |
-| Share (Windows Share sheet) | Partial | ui_platform covers preparing the file; the sheet still needs a manual check |
+| Print (Windows Print dialog) | Done | pdf_print `prints_selected_pages_to_a_pdf_printer`, ui_platform `print_and_share`, unit: print_dialog; real-UI check (Ctrl+P → dialog → Microsoft Print to PDF → saved 3-page file), ADR 0008 |
+| Share (Windows Share sheet) | Done | ui_platform covers preparing the file; real-UI check (Share button → Windows 11 Share sheet for the file), ADR 0008 |
 
 ## Images
 | Feature | Status | Evidence |
@@ -65,7 +65,7 @@ test inside `src/`.
 | EXIF in the Inspector; location shown only on request; Remove Location | Done | ui_images; unit: images::metadata |
 | Colour profiles used for display and kept on save | Done | unit: images `srgb_profile_needs_no_transform`, encode `png_keeps_icc_and_exif` |
 | Convert/export keeping transparency and metadata | Done | ui_images, unit: encode |
-| Print and share images | Done / Partial | Same paths as PDFs |
+| Print and share images | Done | Same paths as PDFs |
 | ML background removal | Not done | Instant Alpha instead |
 | Import from camera or scanner | Not done | New from Clipboard instead (ui_images) |
 

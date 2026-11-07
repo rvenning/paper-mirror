@@ -28,22 +28,75 @@ impl DocWindow {
     }
 
     /// File > Print…: the Windows Print dialog, then the chosen pages.
+    ///
+    /// The dialog runs on its own thread, unowned, while this window is disabled (so it
+    /// stays modal). On the UI thread it misbehaves: owned by the winit window it never
+    /// appears, and once shown there, later file dialogs on that thread stop appearing.
     pub(crate) fn print(&self) {
         self.finish_pending_edit();
         let Some(hwnd) = self.hwnd() else { return };
-        if !self.has_document() {
+        if !self.has_document() || self.st.borrow().printing {
             return;
         }
         let n = self.page_count();
         let has_selection = self.st.borrow().selected.len() > 1;
-        match print_dialog::show(hwnd, n as u32, has_selection) {
+        self.st.borrow_mut().printing = true;
+        unsafe { windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow(hwnd as _, 0) };
+        let win = self.id;
+        std::thread::spawn(move || {
+            let shown = print_dialog::show(0, n as u32, has_selection);
+            let _ = slint::invoke_from_event_loop(move || {
+                super::super::with_window(win, |w| w.on_print_dialog_closed(hwnd, n, shown));
+            });
+        });
+    }
+
+    fn on_print_dialog_closed(&self, hwnd: isize, n: usize, shown: Result<Option<print_dialog::Chosen>, String>) {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        self.st.borrow_mut().printing = false;
+        unsafe {
+            EnableWindow(hwnd as _, 1);
+            SetForegroundWindow(hwnd as _);
+        }
+        match shown {
             Ok(Some(chosen)) => {
                 let pages = chosen.range.pages(n, self.current_page(), &self.selected_pages());
-                self.print_to(chosen.dc, pages, None);
+                let output = if chosen.needs_file {
+                    match self.choose_print_file(&chosen.device) {
+                        Some(p) => Some(p),
+                        None => {
+                            crate::pdf::print::delete_dc(chosen.dc);
+                            return;
+                        }
+                    }
+                } else {
+                    None
+                };
+                self.print_to(chosen.dc, pages, output);
             }
             Ok(None) => {}
             Err(e) => self.error("Printing isn’t available.", &e),
         }
+    }
+
+    /// Where a printing-to-file driver (Microsoft Print to PDF, XPS) should write.
+    fn choose_print_file(&self, device: &str) -> Option<PathBuf> {
+        use slint::ComponentHandle;
+        let ext = print_dialog::output_extension(device);
+        let stem = self
+            .doc_path()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| self.title());
+        let mut d = rfd::FileDialog::new()
+            .set_title("Save Print Output As")
+            .set_file_name(format!("{stem}.{ext}"))
+            .add_filter(ext.to_ascii_uppercase(), &[ext])
+            .set_parent(&self.ui.window().window_handle());
+        if let Some(dir) = self.doc_path().and_then(|p| p.parent().map(|d| d.to_path_buf())) {
+            d = d.set_directory(dir);
+        }
+        d.save_file()
     }
 
     /// Prints `pages` (with markup) to the printer device context `dc`, which is

@@ -50,12 +50,15 @@ Reviewed against the release build on 2026-11-07. See also `docs/feature-checkli
   (400 megapixels across all frames).
 
 ## Windows integration and packaging (ADR 0008)
-- Printing uses the Windows Print dialog. Preview's extra print options (scale
-  percentage, several pages per sheet, layout direction) are not offered. Pages are
-  fitted to the paper and centred, and the driver handles copies and collation.
-- The Share sheet and the Print dialog are system UI that the automated tests can't
-  drive, and they haven't yet been checked by hand. The tests cover what Paper Mirror
-  sends to them.
+- Printing uses the classic Windows Print dialog. It offers all pages, one page range
+  or the thumbnail selection, but no "current page" option. Preview's extra print
+  options (scale percentage, several pages per sheet, layout direction) are not
+  offered. Pages are fitted to the paper and centred, and the driver handles copies
+  and collation.
+- The newer Windows Print dialog isn't used, because it froze on a PC with an offline
+  network printer (ADR 0008).
+- The Share sheet and the Print dialog were checked on one Windows 11 PC by driving
+  the real UI (ADR 0008). They aren't part of the automated test suite.
 - Windows doesn't let programs make themselves the default. Paper Mirror registers
   itself and opens Settings > Default apps, where you choose.
 - The installer and program aren't code-signed, so SmartScreen shows a warning the
