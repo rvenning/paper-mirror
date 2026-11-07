@@ -79,7 +79,10 @@ export component AdjustSizePanel inherits Rectangle {
             PlainButton { text: "OK"; primary: true; clicked => { root.confirm(); } }
         }
     }
+    // Escape closes the panel. Focused when the panel opens; clicks go to the controls.
     FocusScope {
+        focus-on-click: false;
+        init => { self.focus(); }
         key-pressed(e) => {
             if e.text == Key.Escape { root.cancel(); return accept; }
             reject

@@ -87,6 +87,7 @@ export component MarkupBar inherits Rectangle {
                 icon: t.icon;
                 tip: t.tip;
                 selected: root.tool == t.id;
+                checkable: true;
                 clicked => { root.command(t.id); }
             }
         }
@@ -96,6 +97,7 @@ export component MarkupBar inherits Rectangle {
                 icon: Icons.shapes;
                 tip: "Shapes";
                 selected: root.tool == "tool-shape";
+                checkable: true;
                 clicked => { shapes-pop.show(); }
             }
         }
@@ -115,6 +117,7 @@ export component MarkupBar inherits Rectangle {
                 icon: t.icon;
                 tip: t.tip;
                 selected: root.tool == t.id;
+                checkable: true;
                 clicked => { root.command(t.id); }
             }
         }
@@ -125,6 +128,7 @@ export component MarkupBar inherits Rectangle {
                 icon: Icons.instant-alpha;
                 tip: "Instant Alpha: drag across a colour to make it transparent";
                 selected: root.tool == "tool-alpha";
+                checkable: true;
                 clicked => { root.command("instant-alpha"); }
             }
         }
@@ -343,6 +347,7 @@ export component MarkupBar inherits Rectangle {
                         icon: a.icon;
                         tip: a.tip;
                         selected: root.align == i;
+                        checkable: true;
                         clicked => { root.set-text-style(root.font, root.font-size, root.text-color, i); }
                     }
                 }

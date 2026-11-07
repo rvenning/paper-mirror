@@ -107,7 +107,7 @@ impl DocWindow {
         self.ui.set_has_document(true);
         self.ui.set_has_file(true);
         self.ui.set_multi_page(false);
-        self.ui.set_doc_subtitle("Drag to turn · Shift+drag to move · scroll to zoom".into());
+        self.ui.set_doc_subtitle("Drag to turn · Shift+drag to move · scroll or pinch to zoom".into());
         super::super::update_settings(|s| s.add_recent(&path));
         super::super::refresh_window_menus();
         if self.ui.get_inspector_visible() {

@@ -1,6 +1,6 @@
 # Build status (2026-11-07)
 
-All milestones M0–M10 are built and verified: 164 automated tests (115 unit tests,
+All milestones M0–M10 are built and verified: 166 automated tests (117 unit tests,
 plus 49 backend, integration and headless UI tests, many of them end-to-end), with
 clippy and rustfmt clean. Each requirement's status and evidence is in
 `docs/feature-checklist.md`; gaps are in `docs/known-limitations.md`.
@@ -33,9 +33,17 @@ clippy and rustfmt clean. Each requirement's status and evidence is in
 `cargo test` or `.\scripts\package.ps1`. Toolchain: Rust 1.99.1 gnullvm and llvm-mingw
 in `D:\rust`; PDFium via `scripts/fetch-pdfium.ps1`.
 
+## After M10 (2026-11-07)
+- **Licence and signing (ADR 0010):** MIT; `scripts/package.ps1` signs every program
+  and DLL plus the setup when given a certificate, and the setup handles its signed
+  layout.
+- **Touch, pen and accessibility (ADR 0011):** touch pans, pinches and draws; a pen
+  acts as a mouse; the first click after a focus change is no longer lost; Narrator
+  can read page text, button states and every control name.
+
 ## Open items for the owner
-- Choose a licence for Paper Mirror's own code. None has been chosen, and the brief
-  doesn't name one.
-- Code-sign the installer and executable to avoid SmartScreen warnings.
-- Check by hand: touch and pen input, and Narrator. (The Print dialog and Share sheet
-  were checked through the real UI on 2026-11-07; see ADR 0008.)
+- Buy or set up a code-signing certificate (an OV certificate on a token, or Azure
+  Trusted Signing) and package with it. Releases are unsigned until then.
+- When hardware is at hand, try a real touch screen and pen, and listen to Narrator.
+  Both were checked through Windows' own input injection and the UI Automation tree,
+  not by hand.

@@ -150,6 +150,7 @@ impl DocWindow {
                     width: r.w,
                     height: r.h,
                     label: format!("Page {} of {}", i + 1, n).into(),
+                    text: st.page_speech.get(&i).cloned().unwrap_or_default(),
                     ..Default::default()
                 };
                 if let Some((_, img)) = cached {
@@ -515,6 +516,50 @@ impl DocWindow {
         }
     }
 
+    /// Two-finger pinch (phase 0 started, 1 updated, 2 ended, 3 cancelled): zooms about
+    /// the fingers' midpoint, and pans as the midpoint moves. `scale` comes from Slint's
+    /// gesture handler and `x`, `y` are viewport coordinates.
+    pub(crate) fn pinch(&self, phase: i32, scale: f32, x: f32, y: f32) {
+        let c = Point::new(x, y);
+        if !scale.is_finite() || scale <= 0.0 {
+            return;
+        }
+        let prev = match phase {
+            0 => {
+                let zoom = self.st.borrow().zoom;
+                self.st.borrow_mut().pinch = Some(Pinch { zoom, last_scale: scale, ratio: 1.0, center: c });
+                return;
+            }
+            1 => self.st.borrow().pinch,
+            _ => {
+                self.st.borrow_mut().pinch = None;
+                return;
+            }
+        };
+        let Some(prev) = prev else { return };
+        let next = Pinch { last_scale: scale, ratio: prev.next_ratio(scale), center: c, ..prev };
+        self.st.borrow_mut().pinch = Some(next);
+        if self.is_model() {
+            self.model_zoom(prev.ratio / next.ratio);
+            return;
+        }
+        // Pan first, so the zoom below keeps the content under the new midpoint.
+        let (dx, dy) = (prev.center.x - c.x, prev.center.y - c.y);
+        if dx != 0.0 || dy != 0.0 {
+            let (vp, s, content) = (self.viewport(), self.scroll(), self.st.borrow().layout.content);
+            let nx = (s.x + dx).clamp(0.0, (content.w - vp.w).max(0.0));
+            let ny = (s.y + dy).clamp(0.0, (content.h - vp.h).max(0.0));
+            self.ui.invoke_scroll_canvas_to(nx, ny);
+        }
+        let z = self.st.borrow().zoom;
+        let nz = layout::clamp_zoom(next.zoom * next.ratio);
+        if (nz - z).abs() > 1e-4 {
+            self.set_zoom_mode(ZoomMode::Custom(nz), Some(c));
+        } else {
+            self.viewport_changed();
+        }
+    }
+
     pub(crate) fn canvas_key(&self, e: &slint::language::KeyEvent) -> bool {
         if self.is_model() {
             use slint::platform::Key;
@@ -650,5 +695,52 @@ mod mask_tests {
         super::circle_mask(&mut px, 20, 20);
         assert_eq!(px[3], 0, "corner");
         assert_eq!(px[((10 * 20 + 10) * 4 + 3) as usize], 255, "centre");
+    }
+}
+
+/// A two-finger pinch in progress.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Pinch {
+    /// Zoom when the pinch started.
+    zoom: f32,
+    /// The gesture handler's last `scale`.
+    last_scale: f32,
+    /// How far apart the fingers are now, relative to the start.
+    ratio: f32,
+    /// The fingers' last midpoint (viewport coordinates).
+    center: Point,
+}
+
+impl Pinch {
+    /// The finger-distance ratio after the handler's scale becomes `scale`.
+    ///
+    /// Slint's touch recogniser reports each step as the change in the distance ratio
+    /// (r₁ − r₀), but its `ScaleRotateGestureHandler` compounds steps as
+    /// `scale × (1 + step)`, so spreading the fingers to 3× their distance reads as
+    /// about 5×. The steps are recovered from successive scales and added back up.
+    fn next_ratio(&self, scale: f32) -> f32 {
+        (self.ratio + scale / self.last_scale - 1.0).max(0.05)
+    }
+}
+
+#[cfg(test)]
+mod pinch_tests {
+    use super::*;
+
+    #[test]
+    fn compounded_scales_give_back_the_finger_distance_ratio() {
+        // Fingers 120 px apart spread to 360 px in 20 steps: Slint's handler reports
+        // scale ← scale × (1 + Δratio) each step.
+        let mut p = Pinch { zoom: 1.0, last_scale: 1.0, ratio: 1.0, center: Point::new(0.0, 0.0) };
+        let mut scale = 1.0f32;
+        let mut last_ratio = 1.0f32;
+        for i in 1..=20 {
+            let ratio = (120.0 + 12.0 * i as f32) / 120.0;
+            scale *= 1.0 + (ratio - last_ratio);
+            last_ratio = ratio;
+            p = Pinch { ratio: p.next_ratio(scale), last_scale: scale, ..p };
+        }
+        assert!(scale > 5.0, "the handler's own scale overshoots: {scale}");
+        assert!((p.ratio - 3.0).abs() < 1e-3, "{}", p.ratio);
     }
 }

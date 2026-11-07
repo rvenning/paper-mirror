@@ -3,11 +3,14 @@
 Reviewed against the release build on 2026-11-07. See also `docs/feature-checklist.md`.
 
 ## General
-- Touch and pen arrive as pointer input (drag, draw, sign) but haven't been checked on
-  touch hardware. Pinch-to-zoom isn't supported; use Ctrl+wheel or the zoom commands.
-- Screen-reader support (AccessKit names and roles on controls) hasn't been checked
-  with Narrator.
-- Paper Mirror's own licence has not been chosen yet; see the final report.
+- Touch and pen were tested with Windows' input injection, not on touch hardware
+  (ADR 0011). Pressure and pen buttons aren't used.
+- In Text Selection mode one finger pans, so text is selected with a pen or the mouse.
+  Long-pressing with a finger doesn't open context menus.
+- The sidebar tabs aren't in the Tab order; use the View menu to switch them.
+- Screen readers get the page text as one block per page, without headings, reading
+  order corrections or tagged-PDF structure. Scanned pages have no text to read.
+- The UI Automation tree was audited (ADR 0011), but Narrator itself hasn't been run.
 
 ## PDF markup and saving
 - Text boxes and notes draw glyph outlines from the Windows fonts with no complex-script
@@ -61,8 +64,9 @@ Reviewed against the release build on 2026-11-07. See also `docs/feature-checkli
   the real UI (ADR 0008). They aren't part of the automated test suite.
 - Windows doesn't let programs make themselves the default. Paper Mirror registers
   itself and opens Settings > Default apps, where you choose.
-- The installer and program aren't code-signed, so SmartScreen shows a warning the
-  first time they run.
+- Releases are signed only when `scripts/package.ps1` is given a code-signing
+  certificate (ADR 0010). Unsigned builds make SmartScreen warn on first run, and Smart
+  App Control blocks them.
 - There are no automatic updates, because Paper Mirror makes no network requests.
   Running a newer setup updates in place.
 

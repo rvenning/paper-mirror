@@ -67,8 +67,8 @@ lacks (PrintDlg, DataTransferManager, IShellLinkW), plus `windows-collections` 0
 tree through Slint and `png`, so no new code is downloaded.
 
 ## Consequences
-The executables are unsigned, so SmartScreen warns on first run until a code-signing
-certificate is used. Automated tests cover print output, page ranges, file ports,
+The executables are signed only when packaging is given a certificate (ADR 0010);
+unsigned, SmartScreen warns on first run. Automated tests cover print output, page ranges, file ports,
 share-copy preparation, registration and install/update/uninstall, all under scratch
 registry keys and temporary folders.
 

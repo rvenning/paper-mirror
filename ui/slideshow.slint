@@ -35,12 +35,19 @@ export component SlideshowWindow inherits Window {
         background: #000000a0;
         cap := Text { text: root.caption; color: #e6e6e6; font-size: 13px; }
     }
+    // Click or tap: next slide (right-click: previous). A horizontal swipe turns the
+    // slide the way the finger moves, as on a tablet.
     TouchArea {
         pointer-event(e) => {
-            if e.kind == PointerEventKind.up { root.clicked(e.button == PointerEventButton.right); }
+            if e.kind != PointerEventKind.up { return; }
+            if e.button == PointerEventButton.right { root.clicked(true); return; }
+            if self.mouse-x - self.pressed-x > 60px { root.clicked(true); return; }
+            root.clicked(false);
         }
     }
     fs := FocusScope {
+        // Focused from init; clicks belong to the TouchArea.
+        focus-on-click: false;
         key-pressed(e) => { root.key(e) ? accept : reject }
     }
     init => { fs.focus(); }

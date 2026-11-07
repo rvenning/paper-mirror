@@ -59,7 +59,7 @@ export component ThumbnailList inherits Rectangle {
             width: t.width + 12px;
             height: t.height + 30px;
             accessible-role: list-item;
-            accessible-label: t.label;
+            accessible-label: "Page " + t.label + (t.bookmarked ? ", bookmarked" : "");
             accessible-item-selectable: true;
             accessible-item-selected: t.selected;
             accessible-action-default => { root.item-clicked(t.index, false, false); }
@@ -85,6 +85,7 @@ export component ThumbnailList inherits Rectangle {
                     width: parent.width;
                     height: parent.height;
                     image-fit: fill;
+                    accessible-role: none;
                 }
             }
             if t.bookmarked: Path {
@@ -101,6 +102,7 @@ export component ThumbnailList inherits Rectangle {
                 y: t.height + 12px;
                 width: parent.width;
                 text: t.label;
+                accessible-role: none;
                 horizontal-alignment: center;
                 font-size: Theme.font-small;
                 color: t.selected ? Theme.text : Theme.text-secondary;
@@ -148,6 +150,9 @@ export component ThumbnailList inherits Rectangle {
     }
 
     focus := FocusScope {
+        // Clicks belong to the controls underneath, which take focus themselves; a
+        // FocusScope that focuses on click would swallow the first press.
+        focus-on-click: false;
         key-pressed(e) => { root.key(e) ? accept : reject }
     }
 
@@ -247,6 +252,8 @@ export component SidebarTabs inherits Rectangle {
     callback mode-selected(mode: string);
     height: 34px;
     background: Theme.sidebar-bg;
+    accessible-role: tab-list;
+    accessible-label: "Sidebar";
     HorizontalLayout {
         padding: 3px;
         spacing: 2px;
@@ -265,6 +272,7 @@ export component SidebarTabs inherits Rectangle {
             background: root.mode == t.id ? Theme.control-selected : tab-touch.has-hover ? Theme.control-hover : transparent;
             accessible-role: tab;
             accessible-label: t.label;
+            accessible-item-selectable: true;
             accessible-item-selected: root.mode == t.id;
             accessible-action-default => { root.mode-selected(t.id); }
             Path {

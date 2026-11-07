@@ -15,16 +15,8 @@ use crate::platform_windows::{assoc, print_dialog, share};
 impl DocWindow {
     /// The native window handle (None under the test backend).
     pub(crate) fn hwnd(&self) -> Option<isize> {
-        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
         use slint::ComponentHandle;
-        if !super::super::context().winit {
-            return None;
-        }
-        let handle = self.ui.window().window_handle();
-        match handle.window_handle().ok()?.as_raw() {
-            RawWindowHandle::Win32(w) => Some(w.hwnd.get()),
-            _ => None,
-        }
+        hwnd_of(self.ui.window())
     }
 
     /// File > Print…: the Windows Print dialog, then the chosen pages.
@@ -215,5 +207,36 @@ impl DocWindow {
             return;
         }
         assoc::unregister(assoc::BASE);
+    }
+}
+
+impl DocWindow {
+    /// Installs the touch and pen handling (`platform_windows::touch`) once the native
+    /// window exists: Slint creates it only after the event loop starts.
+    pub(crate) fn install_touch(&self, attempt: u32) {
+        if !super::super::context().winit {
+            return;
+        }
+        if let Some(hwnd) = self.hwnd() {
+            crate::platform_windows::touch::install(hwnd);
+        } else if attempt < 100 {
+            let id = self.id;
+            slint::Timer::single_shot(std::time::Duration::from_millis(20), move || {
+                super::super::with_window(id, |w| w.install_touch(attempt + 1));
+            });
+        }
+    }
+}
+
+/// The native handle of a Slint window (None under the test backend, or before the
+/// window exists).
+pub(crate) fn hwnd_of(window: &slint::Window) -> Option<isize> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    if !super::super::context().winit {
+        return None;
+    }
+    match window.window_handle().window_handle().ok()?.as_raw() {
+        RawWindowHandle::Win32(w) => Some(w.hwnd.get()),
+        _ => None,
     }
 }

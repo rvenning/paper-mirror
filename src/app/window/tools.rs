@@ -322,6 +322,8 @@ impl DocWindow {
                             st.links.insert(page, rects);
                         }
                         w.insert_page_text(page, geometry);
+                        // The page item now carries its text for screen readers.
+                        w.update_view();
                         // A Select All waiting on this page can now be drawn.
                         if w.st.borrow().text_sel.is_some() {
                             w.refresh_overlays();

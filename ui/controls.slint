@@ -69,6 +69,8 @@ export component IconButton inherits Rectangle {
     in property <string> tip;
     in property <bool> enabled: true;
     in property <bool> selected: false;
+    // A tool or on/off button: screen readers announce `selected` as pressed or not.
+    in property <bool> checkable: false;
     in property <bool> filled-icon: false;
     callback clicked();
 
@@ -79,6 +81,7 @@ export component IconButton inherits Rectangle {
     accessible-role: button;
     accessible-label: tip;
     accessible-enabled: enabled;
+    accessible-checkable: checkable;
     accessible-checked: selected;
     accessible-action-default => { if enabled { clicked(); } }
 
@@ -116,6 +119,9 @@ export component IconButton inherits Rectangle {
     }
 
     focus := FocusScope {
+        // Clicking a button leaves keyboard focus where it was, as in Windows toolbars;
+        // a FocusScope that focused on click would also swallow the first press.
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
@@ -172,6 +178,7 @@ export component PlainButton inherits Rectangle {
     accessible-action-default => { if enabled { clicked(); } }
     label := Text {
         text: root.text;
+        accessible-role: none;
         color: !root.enabled ? Theme.text-disabled : root.primary ? Theme.accent-text : Theme.text;
         font-size: Theme.font-size;
         horizontal-alignment: center;
@@ -182,6 +189,9 @@ export component PlainButton inherits Rectangle {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        // Clicking a button leaves keyboard focus where it was, as in Windows toolbars;
+        // a FocusScope that focused on click would also swallow the first press.
+        focus-on-click: false;
         enabled: root.enabled;
         key-pressed(e) => {
             if e.text == " " || e.text == "\n" { root.clicked(); return accept; }
@@ -209,6 +219,7 @@ export component Swatch inherits Rectangle {
     border-color: selected ? Theme.accent : Theme.separator;
     accessible-role: button;
     accessible-label: name;
+    accessible-checkable: true;
     accessible-checked: selected;
     accessible-action-default => { clicked(); }
     TouchArea { clicked => { root.clicked(); } }

@@ -65,6 +65,7 @@ component FormToggle inherits Rectangle {
     border-color: Theme.focus-ring;
     accessible-role: checkbox;
     accessible-label: field.label;
+    accessible-checkable: true;
     accessible-checked: field.checked;
     accessible-action-default => { if !root.field.read-only { root.toggle(); } }
     TouchArea {
@@ -72,6 +73,9 @@ component FormToggle inherits Rectangle {
         clicked => { focus.focus(); root.toggle(); }
     }
     focus := FocusScope {
+        // Clicks belong to the controls underneath, which take focus themselves; a
+        // FocusScope that focuses on click would swallow the first press.
+        focus-on-click: false;
         key-pressed(e) => {
             if e.text == " " && !root.field.read-only { root.toggle(); return accept; }
             reject

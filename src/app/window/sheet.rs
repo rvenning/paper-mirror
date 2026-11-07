@@ -173,6 +173,9 @@ impl DocWindow {
         });
         let _ = window.show();
         window.window().set_fullscreen(true);
+        if let Some(hwnd) = super::platform::hwnd_of(window.window()) {
+            crate::platform_windows::touch::install(hwnd);
+        }
         *self.slideshow.borrow_mut() = Some(Slideshow {
             window,
             page: Cell::new(page),

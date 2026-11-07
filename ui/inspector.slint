@@ -41,13 +41,14 @@ export component InspectorPanel inherits Rectangle {
                 alignment: start;
                 for r in root.rows: VerticalLayout {
                     padding-top: r.heading ? 8px : 0px;
+                    // Read as one line ("Name: touch.pdf"; a heading as its name alone).
                     accessible-role: text;
-                    accessible-label: r.key + ": " + r.value;
-                    if r.heading: Text { text: r.key; font-weight: 600; color: Theme.text; }
+                    accessible-label: r.heading || r.value == "" ? r.key : r.key + ": " + r.value;
+                    if r.heading: Text { text: r.key; font-weight: 600; color: Theme.text; accessible-role: none; }
                     if !r.heading: HorizontalLayout {
                         spacing: 8px;
-                        Text { text: r.key; width: 96px; color: Theme.text-secondary; horizontal-alignment: right; wrap: word-wrap; }
-                        Text { text: r.value; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; }
+                        Text { text: r.key; width: 96px; color: Theme.text-secondary; horizontal-alignment: right; wrap: word-wrap; accessible-role: none; }
+                        Text { text: r.value; color: Theme.text; wrap: word-wrap; horizontal-stretch: 1; accessible-role: none; }
                     }
                 }
             }

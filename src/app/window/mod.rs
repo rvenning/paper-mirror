@@ -169,6 +169,8 @@ pub(crate) struct ViewState {
     pub list_page: Option<usize>,
     /// Character geometry per page for text selection, fetched with the links.
     pub page_text: HashMap<usize, Rc<crate::core::textsel::PageText>>,
+    /// Each cached page's text as read aloud (see `PageItem.text`), keyed like `page_text`.
+    pub page_speech: HashMap<usize, slint::SharedString>,
     pub pending_text: HashSet<usize>,
     pub text_sel: Option<crate::core::textsel::TextSelection>,
     /// Where the current text drag started.
@@ -207,6 +209,8 @@ pub(crate) struct ViewState {
     pub share_after_save: Option<PathBuf>,
     /// The Print dialog is open (on its own thread).
     pub printing: bool,
+    /// A two-finger pinch in progress (see `pinch`).
+    pub pinch: Option<view::Pinch>,
     /// The open 3D model (ADR 0009), instead of a PDF or image.
     pub model: Option<model::ModelState>,
     pub model_path: Option<PathBuf>,
@@ -343,6 +347,7 @@ impl DocWindow {
         w.bind();
         super::register_window(w.clone());
         w.ui.show().map_err(|e| e.to_string())?;
+        w.install_touch(0);
         super::refresh_window_menus();
         if let Some(p) = path {
             w.open_path(p);
@@ -360,6 +365,7 @@ impl DocWindow {
         self.ui.on_canvas_viewport_changed(move || super::with_window(id, |w| w.viewport_changed()));
         self.ui.on_thumbs_viewport_changed(move || super::with_window(id, |w| w.update_thumbs()));
         self.ui.on_canvas_ctrl_wheel(move |delta, x, y| super::with_window(id, |w| w.wheel_zoom(delta, x, y)));
+        self.ui.on_canvas_pinch(move |phase, scale, x, y| super::with_window(id, |w| w.pinch(phase, scale, x, y)));
         self.ui.on_canvas_pointer(move |kind, x, y, shift, ctrl, button| {
             super::with_window(id, |w| w.pointer(kind, Point::new(x, y), shift, ctrl, button))
         });
@@ -665,6 +671,7 @@ impl DocWindow {
         st.pending_links.clear();
         st.list_page = None;
         st.page_text.clear();
+        st.page_speech.clear();
         st.pending_text.clear();
         st.text_sel = None;
         st.annots.clear();

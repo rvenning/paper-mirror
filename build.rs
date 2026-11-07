@@ -65,6 +65,7 @@ BEGIN
       VALUE "FileDescription", "{description}"
       VALUE "FileVersion", "{version}"
       VALUE "InternalName", "{bin}"
+      VALUE "LegalCopyright", "Copyright (c) 2026 Robert Venning. MIT License."
       VALUE "OriginalFilename", "{bin}.exe"
       VALUE "ProductName", "Paper Mirror"
       VALUE "ProductVersion", "{version}"

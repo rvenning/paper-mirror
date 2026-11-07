@@ -5,9 +5,11 @@
 //! `[stub exe][entries][sha256 of entries: 32][entries offset: u64][count: u32]["PMSETUP2"]`
 //!
 //! where each entry is `[name length: u32][name: UTF-8][size: u64][compressed size: u64]`
-//! followed by the file, raw-deflate compressed.
+//! followed by the file, raw-deflate compressed. A signed setup also ends with an
+//! Authenticode certificate table after the footer (see [`signature`]). The payload may
+//! carry its own (signed) uninstaller; otherwise the setup stub becomes the uninstaller.
 
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::platform_windows::assoc;
@@ -43,25 +45,68 @@ fn sha256(data: &[u8]) -> Result<[u8; 32], String> {
     if status == 0 { Ok(out) } else { Err(format!("SHA-256 failed (0x{status:08x})")) }
 }
 
-/// The executable without any payload (`exe` may already carry one).
+/// The Authenticode signature of a PE file, if it has one: the file offset of the
+/// certificate table, and where in the headers its directory entry sits. Signing
+/// appends the table at the end of the file, after the payload, and records it in the
+/// optional header's security directory (data directory 4, which holds a file offset
+/// rather than an address).
+pub fn signature(bytes: &[u8]) -> Option<(usize, usize)> {
+    let u16_at = |i: usize| Some(u16::from_le_bytes(bytes.get(i..i + 2)?.try_into().ok()?));
+    let u32_at = |i: usize| Some(u32::from_le_bytes(bytes.get(i..i + 4)?.try_into().ok()?) as usize);
+    if bytes.get(..2)? != b"MZ" {
+        return None;
+    }
+    let pe = u32_at(0x3C)?;
+    if bytes.get(pe..pe.checked_add(4)?)? != b"PE\0\0" {
+        return None;
+    }
+    let opt = pe + 24;
+    let (count_at, dirs) = match u16_at(opt)? {
+        0x10b => (opt + 92, opt + 96),
+        0x20b => (opt + 108, opt + 112),
+        _ => return None,
+    };
+    if u32_at(count_at)? < 5 {
+        return None;
+    }
+    let entry = dirs + 4 * 8;
+    let (start, size) = (u32_at(entry)?, u32_at(entry + 4)?);
+    (start != 0 && size != 0 && start <= bytes.len() && start + size <= bytes.len()).then_some((start, entry))
+}
+
+/// The file without its Authenticode signature: the certificate table is cut off
+/// and its directory entry cleared, so the bytes are a valid unsigned program.
+fn unsigned(mut bytes: Vec<u8>) -> Vec<u8> {
+    if let Some((start, entry)) = signature(&bytes) {
+        bytes.truncate(start);
+        bytes[entry..entry + 8].fill(0);
+    }
+    bytes
+}
+
+/// The executable without any payload or signature (`exe` may carry either).
 pub fn stub_bytes(exe: &Path) -> Result<Vec<u8>, String> {
-    let bytes = std::fs::read(exe).map_err(|e| e.to_string())?;
+    let bytes = unsigned(std::fs::read(exe).map_err(|e| e.to_string())?);
     let len = match footer(&bytes) {
-        Some((offset, _, _)) => offset as usize,
-        None => bytes.len(),
+        Some((offset, _, _, end)) if offset as usize <= end - FOOTER => offset as usize,
+        _ => bytes.len(),
     };
     Ok(bytes[..len].to_vec())
 }
 
-fn footer(bytes: &[u8]) -> Option<(u64, u32, [u8; 32])> {
-    if bytes.len() < FOOTER || &bytes[bytes.len() - 8..] != MAGIC {
-        return None;
-    }
-    let f = &bytes[bytes.len() - FOOTER..];
+/// Finds the payload footer: at the end of the file, or, in a signed setup, just
+/// before the certificate table (signing pads the file to 8 bytes first). Returns
+/// (payload offset, entry count, checksum, footer end).
+fn footer(bytes: &[u8]) -> Option<(u64, u32, [u8; 32], usize)> {
+    let end = signature(bytes).map_or(bytes.len(), |(start, _)| start);
+    let end = (end.saturating_sub(7)..=end)
+        .rev()
+        .find(|&e| e >= FOOTER && &bytes[e - 8..e] == MAGIC && bytes[e..end].iter().all(|&b| b == 0))?;
+    let f = &bytes[end - FOOTER..end];
     let hash: [u8; 32] = f[..32].try_into().ok()?;
     let offset = u64::from_le_bytes(f[32..40].try_into().ok()?);
     let count = u32::from_le_bytes(f[40..44].try_into().ok()?);
-    (offset as usize <= bytes.len() - FOOTER).then_some((offset, count, hash))
+    Some((offset, count, hash, end))
 }
 
 /// Writes `out` = stub of `setup_exe` + the files as a payload.
@@ -91,30 +136,17 @@ pub fn pack(setup_exe: &Path, files: &[(String, PathBuf)], out: &Path) -> Result
 
 /// Reads and verifies the payload of `exe`. Ok(None) means there is none.
 pub fn read_payload(exe: &Path) -> Result<Option<Vec<Entry>>, String> {
-    let mut f = std::fs::File::open(exe).map_err(|e| e.to_string())?;
-    let len = f.metadata().map_err(|e| e.to_string())?.len();
-    if len < FOOTER as u64 {
-        return Ok(None);
-    }
-    let mut tail = vec![0u8; FOOTER];
-    f.seek(SeekFrom::End(-(FOOTER as i64))).map_err(|e| e.to_string())?;
-    f.read_exact(&mut tail).map_err(|e| e.to_string())?;
-    if &tail[FOOTER - 8..] != MAGIC {
-        return Ok(None);
-    }
-    let offset = u64::from_le_bytes(tail[32..40].try_into().unwrap());
-    let count = u32::from_le_bytes(tail[40..44].try_into().unwrap());
-    if offset > len - FOOTER as u64 {
+    let bytes = std::fs::read(exe).map_err(|e| e.to_string())?;
+    let Some((offset, count, hash, end)) = footer(&bytes) else { return Ok(None) };
+    if offset as usize > end - FOOTER {
         return Err("The setup file is damaged.".into());
     }
-    let mut payload = vec![0u8; (len - FOOTER as u64 - offset) as usize];
-    f.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
-    f.read_exact(&mut payload).map_err(|e| e.to_string())?;
-    if sha256(&payload)?[..] != tail[..32] {
+    let payload = &bytes[offset as usize..end - FOOTER];
+    if sha256(payload)? != hash {
         return Err("The setup file is damaged (checksum mismatch). Download it again.".into());
     }
     let mut entries = Vec::new();
-    let mut p = &payload[..];
+    let mut p = payload;
     for _ in 0..count {
         let take = |p: &mut &[u8], n: usize| -> Result<Vec<u8>, String> {
             if p.len() < n {
@@ -182,7 +214,9 @@ pub fn install(entries: &[Entry], stub: &[u8], opts: &Options) -> Result<PathBuf
         .map_err(|e| format!("The folder {} couldn’t be created: {e}", opts.dir.display()))?;
     let mut names: Vec<String> = Vec::new();
     let mut files: Vec<(&str, &[u8])> = entries.iter().map(|e| (e.name.as_str(), e.data.as_slice())).collect();
-    files.push((UNINSTALLER, stub));
+    if !entries.iter().any(|e| e.name == UNINSTALLER) {
+        files.push((UNINSTALLER, stub));
+    }
     for (name, data) in files {
         let target = opts.dir.join(name);
         let tmp = opts.dir.join(format!("{name}.new"));

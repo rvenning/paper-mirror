@@ -104,7 +104,10 @@ export component ShortcutsPanel inherits Rectangle {
             PlainButton { text: "Close"; primary: true; clicked => { root.closed(); } }
         }
     }
+    // Escape closes the panel. Focused when the panel opens; clicks go to the controls.
     FocusScope {
+        focus-on-click: false;
+        init => { self.focus(); }
         key-pressed(e) => {
             if e.text == Key.Escape { root.closed(); return accept; }
             reject

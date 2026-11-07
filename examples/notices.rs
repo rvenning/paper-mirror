@@ -142,6 +142,9 @@ fn main() {
     let mut s = String::new();
     s.push_str("Paper Mirror — third-party notices\n");
     s.push_str("===================================\n\n");
+    s.push_str("Paper Mirror itself is released under the MIT License:\n\n");
+    s.push_str(&std::fs::read_to_string("LICENSE").expect("LICENSE in the project root"));
+    s.push_str("\n-----------------------------------\n\n");
     s.push_str("Paper Mirror includes the software listed below. Each component is used under\n");
     s.push_str("the licence shown; the licence texts follow. Slint is used under the Slint\n");
     s.push_str("Royalty-free Desktop, Mobile, and Web Applications License 2.0.\n\n");

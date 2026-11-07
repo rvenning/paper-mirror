@@ -38,7 +38,7 @@ test inside `src/`.
 | Feature | Status | Evidence |
 |---|---|---|
 | Detect and fill text, check, radio, choice fields; save | Done | pdf_forms `fills_and_saves_every_field_type`, ui_forms |
-| Signatures drawn with the mouse (pen and touch arrive as the same pointer input, not checked on hardware), or traced from an image | Done | ui_forms `forms_and_signatures`, `signature_images_are_traced` |
+| Signatures drawn with the mouse or pen (a finger reaches the same drawing pad, not tested separately), or traced from an image | Done | ui_forms `forms_and_signatures`, `signature_images_are_traced` |
 | Signatures stored encrypted for the user (DPAPI) | Done | unit: storage::signatures, platform_windows::dpapi |
 
 ## Pages, effects, security, files
@@ -83,8 +83,11 @@ test inside `src/`.
 | Preview-like window, toolbar, sidebar, Markup toolbar, full menus, context menus | Done | ui_shell; snapshots (M1–M9) |
 | Keyboard shortcuts documented (Help > Keyboard Shortcuts) and in sync with menus | Done | unit: core::commands `ui_menus_match_registry` |
 | Light/dark appearance, resizable sidebar, multiple windows | Done | ui_shell |
-| High-DPI (per-monitor v2 manifest), touch and pen as pointer input | Partial | Manifest in place; not checked on touch hardware |
-| Accessibility (AccessKit labels and roles) | Partial | Labels and roles set; not checked with Narrator |
+| High-DPI (per-monitor v2 manifest) | Done | Manifest in place |
+| Touch: tap, one-finger pan, pinch to zoom, finger drawing in markup tools, 3D orbit, slideshow swipe | Done | Injected touch on the release build, ADR 0011; unit: view `pinch_tests`, touch |
+| Pen: selects, draws and clicks like a mouse | Done | Injected pen on the release build, ADR 0011 |
+| Accessibility: names, roles, states and actions for UI Automation (Narrator); page text readable; menus via MSAA | Done | UI Automation and MSAA audit of the release build, ADR 0011 |
+| Own licence (MIT) and code signing in packaging | Done | ADR 0010; installer `pack_install_and_uninstall` (signed layout); test-signed package run |
 | Opt-in file associations, Default apps | Done | unit: assoc `register_and_unregister_under_a_scratch_key`, installer test |
 | Per-user installer, update, uninstall; portable zip | Done | installer `pack_install_and_uninstall`; manual run of the packaged setup (M8) |
 | No network, telemetry, background services or auto-start | Done | ADR 0005; no networking crates among the linked crates listed in THIRD-PARTY-NOTICES.txt |

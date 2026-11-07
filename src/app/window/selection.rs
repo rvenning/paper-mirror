@@ -22,6 +22,7 @@ impl DocWindow {
     pub(crate) fn insert_page_text(&self, page: usize, t: PageText) {
         let mut st = self.st.borrow_mut();
         st.pending_text.remove(&page);
+        st.page_speech.insert(page, speech(&t));
         st.page_text.insert(page, Rc::new(t));
         if st.page_text.len() > TEXT_CACHE_PAGES {
             // Evict the page farthest from the current one (never a selected page).
@@ -35,6 +36,7 @@ impl DocWindow {
                 .max_by_key(|p| p.abs_diff(current));
             if let Some(v) = victim {
                 st.page_text.remove(&v);
+                st.page_speech.remove(&v);
             }
         }
     }
@@ -180,4 +182,12 @@ fn join_selection(sel: &TextSelection, first_page: usize, pages: &[Rc<PageText>]
         }
     }
     out
+}
+
+/// A page's text as a screen reader should hear it: one line per line of the page,
+/// with runs of blank space collapsed.
+fn speech(t: &PageText) -> slint::SharedString {
+    let text = t.text(0, t.len());
+    let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    lines.join("\n").into()
 }

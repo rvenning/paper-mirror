@@ -9,6 +9,7 @@ pub mod print_dialog;
 pub mod random;
 pub mod share;
 pub mod shell;
+pub mod touch;
 pub mod wic;
 
 /// A NUL-terminated UTF-16 string for Win32.

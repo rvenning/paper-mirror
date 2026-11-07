@@ -220,6 +220,7 @@ impl DocWindow {
             st.pending_tile = None;
             st.links.clear();
             st.page_text.clear();
+            st.page_speech.clear();
             st.lens_cache.clear();
         }
         self.render_gen.bump();

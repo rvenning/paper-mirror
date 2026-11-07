@@ -190,6 +190,7 @@ export component MainWindow inherits Window {
     callback prompt-cancelled(kind: string);
     callback canvas-viewport-changed();
     callback canvas-ctrl-wheel(delta: float, x: length, y: length);
+    callback canvas-pinch(phase: int, scale: float, x: length, y: length);
     callback canvas-key(event: KeyEvent) -> bool;
     callback canvas-pointer(kind: int, x: length, y: length, shift: bool, ctrl: bool, button: int);
     callback thumbs-viewport-changed();
@@ -423,6 +424,7 @@ export component MainWindow inherits Window {
                         icon: Icons.sidebar;
                         tip: "Show or hide the sidebar (Ctrl+Alt+S)";
                         selected: root.sidebar-visible;
+                        checkable: true;
                         clicked => { root.command("toggle-sidebar"); }
                     }
                 }
@@ -453,6 +455,7 @@ export component MainWindow inherits Window {
                         tip: "Show the inspector (Ctrl+I)";
                         enabled: root.has-document;
                         selected: root.inspector-visible;
+                        checkable: true;
                         clicked => { root.command("inspector"); }
                     }
                 }
@@ -484,6 +487,7 @@ export component MainWindow inherits Window {
                         tip: "Highlight the selected text (Ctrl+Alt+H)";
                         enabled: root.has-document && !root.is-image && !root.is-model;
                         selected: root.tool == "tool-highlight";
+                        checkable: true;
                         clicked => { root.command("highlight"); }
                     }
                 }
@@ -494,6 +498,7 @@ export component MainWindow inherits Window {
                         tip: "Show or hide the Markup toolbar (Ctrl+Shift+A)";
                         enabled: root.has-document && !root.is-model;
                         selected: root.markup-visible;
+                        checkable: true;
                         clicked => { root.command("toggle-markup"); }
                     }
                 }
@@ -668,6 +673,8 @@ export component MainWindow inherits Window {
                     empty-detail: "Choose File > Open, press Ctrl+O, or drag a file into this window.";
                     viewport-changed => { root.canvas-viewport-changed(); }
                     ctrl-wheel(d, x, y) => { root.canvas-ctrl-wheel(d, x, y); }
+                    pinch(p, s, x, y) => { root.canvas-pinch(p, s, x, y); }
+                    touch-draws: root.is-model || root.tool != "tool-text";
                     key(e) => { return root.canvas-key(e); }
                     pointer(k, x, y, s, c, b) => { root.canvas-pointer(k, x, y, s, c, b); }
                     can-copy: root.has-text-selection || root.has-rect-selection;
@@ -845,9 +852,9 @@ export component MainWindow inherits Window {
 
     about := PopupWindow {
         x: (root.width - 360px) / 2;
-        y: (root.height - 320px) / 2;
+        y: (root.height - 350px) / 2;
         width: 360px;
-        height: 320px;
+        height: 350px;
         close-policy: close-on-click-outside;
         Rectangle {
             background: Theme.panel-bg;
@@ -863,6 +870,13 @@ export component MainWindow inherits Window {
                     text: "A lightweight PDF and image viewer for Windows, inspired by macOS Preview. Not affiliated with or endorsed by Apple.";
                     wrap: word-wrap;
                     color: Theme.text;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "© 2026 Robert Venning. Released under the MIT License.";
+                    wrap: word-wrap;
+                    font-size: Theme.font-small;
+                    color: Theme.text-secondary;
                     horizontal-alignment: center;
                 }
                 AboutSlint { }
