@@ -15,6 +15,10 @@ no telemetry and no network access, and it never starts in the background.
   JPEG 2000 and HEIC/HEIF/AVIF (with Microsoft's free codec extensions). Markup, rotate,
   flip, crop, Adjust Size, Adjust Color, Instant Alpha, EXIF and location (shown only
   on request, removable), colour profiles, and conversion between formats.
+- **3D models:** STL, OBJ, PLY and glTF/GLB, drawn on the CPU. You can orbit, pan and
+  zoom, fix the orientation, and export to the other formats or to an image.
+  USD/USDZ, Alembic, MaterialX and OpenVDB are recognised, with an explanation of why
+  they can't be shown.
 - **Windows:** Print through the Windows Print dialog, Share, New from Clipboard, opt-in
   "Open with" registration, and a per-user installer or a portable zip.
 
@@ -47,7 +51,10 @@ Every toolchain lives on D: (see `docs/decisions/0001-toolchain.md`).
 ## Documentation
 - `docs/discovery.md`: requirements, document conflicts and how they were resolved.
 - `docs/decisions/`: architecture decision records.
+- `docs/feature-checklist.md`: each requirement's status, with the test that proves it.
 - `docs/known-limitations.md`: what doesn't work yet, or differs from Preview.
+- `docs/performance.md`: measured start-up, rendering and memory, plus guardrails
+  (`scripts/measure.ps1`).
 - `docs/STATUS.md`: milestone status.
 
 ## Licences

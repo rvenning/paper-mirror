@@ -1,6 +1,13 @@
 # Known limitations
 
-Collected as each milestone lands; M10 reviews the whole list against the final build.
+Reviewed against the release build on 2026-11-07. See also `docs/feature-checklist.md`.
+
+## General
+- Touch and pen arrive as pointer input (drag, draw, sign) but haven't been checked on
+  touch hardware. Pinch-to-zoom isn't supported; use Ctrl+wheel or the zoom commands.
+- Screen-reader support (AccessKit names and roles on controls) hasn't been checked
+  with Narrator.
+- Paper Mirror's own licence has not been chosen yet; see the final report.
 
 ## PDF markup and saving
 - Text boxes and notes draw glyph outlines from the Windows fonts with no complex-script
@@ -74,3 +81,4 @@ Collected as each milestone lands; M10 reviews the whole list against the final 
   measurements aren't available on models.
 - External glTF buffers and OBJ material libraries must sit in the same folder as the
   model.
+- Models can't be exported as a movie (turntable) or a PDF; export an image of the view.
