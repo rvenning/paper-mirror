@@ -78,19 +78,32 @@ impl DocWindow {
         if !super::super::context().winit {
             return Some(false);
         }
+        let text = "Redaction permanently removes the marked text, images and graphics from the saved file. \
+                    It can’t be undone.\n\nSave the redacted version as a new file to keep the original.";
+        self.ask("Redact and save?", text, ["Save As…", "Save"], "Yes saves a new file; No saves over this one.")
+            .map(|i| i == 0)
+    }
+
+    /// A warning with two labelled choices and Cancel: Some(0) or Some(1) for the
+    /// choice, None for Cancel. Without task dialogs (see `platform_windows::task_dialog`)
+    /// it falls back to a Yes/No/Cancel box, with `fallback_hint` saying what Yes and No do.
+    fn ask(&self, title: &str, text: &str, choices: [&str; 2], fallback_hint: &str) -> Option<usize> {
+        use crate::platform_windows::task_dialog;
+        let parent = self.hwnd().unwrap_or(0);
+        let buttons = [choices[0], choices[1], "Cancel"];
+        if let Some(i) = task_dialog::choose(parent, title, text, &buttons, 2) {
+            return (i < 2).then_some(i);
+        }
         let r = rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Warning)
-            .set_title("Redact and save?")
-            .set_description(
-                "Redaction permanently removes the marked text, images and graphics from the saved file. \
-                 It can’t be undone.\n\nSave the redacted version as a new file to keep the original.",
-            )
-            .set_buttons(rfd::MessageButtons::YesNoCancelCustom("Save As…".into(), "Save".into(), "Cancel".into()))
+            .set_title(title)
+            .set_description(format!("{text}\n\n{fallback_hint}"))
+            .set_buttons(rfd::MessageButtons::YesNoCancel)
             .set_parent(&self.ui.window().window_handle())
             .show();
         match r {
-            rfd::MessageDialogResult::Custom(s) if s == "Save As…" => Some(true),
-            rfd::MessageDialogResult::Custom(s) if s == "Save" => Some(false),
+            rfd::MessageDialogResult::Yes => Some(0),
+            rfd::MessageDialogResult::No => Some(1),
             _ => None,
         }
     }
@@ -240,15 +253,10 @@ impl DocWindow {
         if !super::super::context().winit {
             return false;
         }
-        let r = rfd::MessageDialog::new()
-            .set_level(rfd::MessageLevel::Warning)
-            .set_title("Paper Mirror")
-            .set_description(format!("Do you want to save the changes you made to “{}”?", self.title()))
-            .set_buttons(rfd::MessageButtons::YesNoCancelCustom("Save".into(), "Don’t Save".into(), "Cancel".into()))
-            .set_parent(&self.ui.window().window_handle())
-            .show();
-        match r {
-            rfd::MessageDialogResult::Custom(s) if s == "Save" => {
+        let text = format!("Do you want to save the changes you made to “{}”?", self.title());
+        let choice = self.ask("Paper Mirror", &text, ["Save", "Don’t Save"], "Yes saves; No closes without saving.");
+        match choice {
+            Some(0) => {
                 if self.is_model() {
                     self.save_model(false);
                     return false;
@@ -272,7 +280,7 @@ impl DocWindow {
                 self.save_to(target, SaveOptions::default(), AfterSave::Close);
                 false
             }
-            rfd::MessageDialogResult::Custom(s) if s == "Don’t Save" => {
+            Some(_) => {
                 self.end_slideshow();
                 self.st.borrow_mut().dirty = false;
                 self.release_document();

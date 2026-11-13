@@ -9,6 +9,7 @@ pub mod print_dialog;
 pub mod random;
 pub mod share;
 pub mod shell;
+pub mod task_dialog;
 pub mod touch;
 pub mod wic;
 
