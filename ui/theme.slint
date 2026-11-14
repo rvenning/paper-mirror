@@ -1,11 +1,13 @@
 // Paper Mirror design tokens. Light and dark values follow the quiet, neutral
 // treatment of macOS Preview while using Windows-appropriate type and metrics.
-import { Palette } from "std-widgets.slint";
 
 export global Theme {
-    // Set from Rust: "system" follows Palette.color-scheme; "light"/"dark" force.
+    // Set from Rust: "system" follows Windows' app mode (`system-dark`, read from the
+    // registry); "light"/"dark" force. Rust then points Slint's widget palette at the
+    // result, so fields and scroll bars match too.
     in-out property <string> appearance: "system";
-    out property <bool> dark: appearance == "dark" || (appearance == "system" && Palette.color-scheme == ColorScheme.dark);
+    in-out property <bool> system-dark;
+    out property <bool> dark: appearance == "dark" || (appearance == "system" && system-dark);
 
     // Surfaces
     out property <color> window-bg: dark ? #1f1f1f : #f3f3f3;
@@ -26,10 +28,22 @@ export global Theme {
     out property <color> control-hover: dark ? #ffffff14 : #0000000d;
     out property <color> control-pressed: dark ? #ffffff24 : #0000001a;
     out property <color> control-selected: dark ? #ffffff2a : #00000021;
-    out property <color> accent: dark ? #4c9aff : #0a64d6;
+    // The Windows accent colour (set from Rust; transparent when there is none). The
+    // theme's accents take its hue and colourfulness but keep their own lightness, so
+    // contrast stays as designed whatever accent the user picked.
+    in-out property <color> system-accent: transparent;
+    pure function accentify(c: color) -> color {
+        if (system-accent.alpha == 0) {
+            return c;
+        }
+        let a = system-accent.to-oklch();
+        let d = c.to-oklch();
+        return oklch(d.lightness, min(a.chroma, d.chroma * 1.25), a.hue, d.alpha);
+    }
+    out property <color> accent: accentify(dark ? #4c9aff : #0a64d6);
     out property <color> accent-text: #ffffff;
-    out property <color> focus-ring: dark ? #8ab8ff : #0a64d6;
-    out property <color> selection: dark ? #4c9aff55 : #0a64d640;
+    out property <color> focus-ring: accentify(dark ? #8ab8ff : #0a64d6);
+    out property <color> selection: accentify(dark ? #4c9aff55 : #0a64d640);
     out property <color> search-match: #ffd60a80;
     out property <color> search-current: #ff9f0aa0;
     out property <color> warning: dark ? #ffcc4d : #9a6700;
@@ -44,6 +58,7 @@ export global Theme {
     out property <length> radius: 6px;
     out property <length> sidebar-min: 120px;
     out property <length> sidebar-max: 420px;
+    out property <string> font-family: "Segoe UI Variable Text";
     out property <length> font-size: 13px;
     out property <length> font-small: 11px;
     out property <length> font-title: 13px;

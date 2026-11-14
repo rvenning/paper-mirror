@@ -152,6 +152,7 @@ export component MarkupBar inherits Rectangle {
                 height: Theme.icon-button-size;
                 border-radius: Theme.radius;
                 background: stroke-touch.has-hover ? Theme.control-hover : transparent;
+                animate background { duration: Theme.motion-fast; }
                 accessible-role: button;
                 accessible-label: "Border colour";
                 accessible-action-default => { stroke-pop.show(); }
@@ -166,6 +167,7 @@ export component MarkupBar inherits Rectangle {
                 height: Theme.icon-button-size;
                 border-radius: Theme.radius;
                 background: fill-touch.has-hover ? Theme.control-hover : transparent;
+                animate background { duration: Theme.motion-fast; }
                 accessible-role: button;
                 accessible-label: "Fill colour";
                 accessible-action-default => { fill-pop.show(); }
@@ -244,6 +246,7 @@ export component MarkupBar inherits Rectangle {
                     height: 20px;
                     border-radius: 4px;
                     background: root.line-width == w ? Theme.control-selected : lw-touch.has-hover ? Theme.control-hover : transparent;
+                    animate background { duration: Theme.motion-fast; }
                     accessible-role: button;
                     accessible-label: w + " point line";
                     Rectangle { x: 10px; width: 120px; height: max(1px, w * 1px); background: Theme.text; }
@@ -254,6 +257,7 @@ export component MarkupBar inherits Rectangle {
                     height: 22px;
                     border-radius: 4px;
                     background: dash-touch.has-hover ? Theme.control-hover : transparent;
+                    animate background { duration: Theme.motion-fast; }
                     accessible-role: checkbox;
                     accessible-label: "Dashed line";
                     accessible-checked: root.dashed;

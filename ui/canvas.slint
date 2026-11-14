@@ -492,6 +492,7 @@ export component ContactSheet inherits Rectangle {
                 y: 2px;
                 border-radius: 6px;
                 background: t.selected ? Theme.control-selected : transparent;
+                animate background { duration: Theme.motion-fast; }
             }
             Rectangle {
                 x: 8px;

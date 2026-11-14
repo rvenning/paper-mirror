@@ -347,7 +347,7 @@ impl DocWindow {
         w.bind();
         super::register_window(w.clone());
         w.ui.show().map_err(|e| e.to_string())?;
-        w.install_touch(0);
+        w.install_window_hooks(0);
         super::refresh_window_menus();
         if let Some(p) = path {
             w.open_path(p);
@@ -366,6 +366,7 @@ impl DocWindow {
         self.ui.on_thumbs_viewport_changed(move || super::with_window(id, |w| w.update_thumbs()));
         self.ui.on_canvas_ctrl_wheel(move |delta, x, y| super::with_window(id, |w| w.wheel_zoom(delta, x, y)));
         self.ui.on_canvas_pinch(move |phase, scale, x, y| super::with_window(id, |w| w.pinch(phase, scale, x, y)));
+        self.ui.on_theme_changed(move || super::with_window(id, |w| w.apply_chrome()));
         self.ui.on_canvas_pointer(move |kind, x, y, shift, ctrl, button| {
             super::with_window(id, |w| w.pointer(kind, Point::new(x, y), shift, ctrl, button))
         });

@@ -211,20 +211,60 @@ impl DocWindow {
 }
 
 impl DocWindow {
-    /// Installs the touch and pen handling (`platform_windows::touch`) once the native
-    /// window exists: Slint creates it only after the event loop starts.
-    pub(crate) fn install_touch(&self, attempt: u32) {
+    /// Installs the touch and pen handling (`platform_windows::touch`) and the themed
+    /// title and menu bars (`platform_windows::chrome`) once the native window exists:
+    /// Slint creates it only after the event loop starts.
+    pub(crate) fn install_window_hooks(&self, attempt: u32) {
         if !super::super::context().winit {
             return;
         }
         if let Some(hwnd) = self.hwnd() {
             crate::platform_windows::touch::install(hwnd);
+            crate::platform_windows::chrome::install(hwnd);
+            crate::platform_windows::chrome::on_settings_changed(|| {
+                slint::Timer::single_shot(std::time::Duration::ZERO, || {
+                    for w in super::super::windows() {
+                        w.apply_chrome();
+                    }
+                });
+            });
+            self.apply_chrome();
         } else if attempt < 100 {
             let id = self.id;
             slint::Timer::single_shot(std::time::Duration::from_millis(20), move || {
-                super::super::with_window(id, |w| w.install_touch(attempt + 1));
+                super::super::with_window(id, |w| w.install_window_hooks(attempt + 1));
             });
         }
+    }
+
+    /// Paints the title bar and menu bar in the current theme's toolbar colours.
+    pub(crate) fn apply_chrome(&self) {
+        use crate::platform_windows::chrome::{self, Colors};
+        use slint::ComponentHandle;
+        let Some(hwnd) = self.hwnd() else { return };
+        // Windows' light/dark setting may have changed too.
+        super::super::apply_theme_to(self);
+        let theme = self.ui.global::<crate::ui::Theme>();
+        let accent = chrome::system_accent()
+            .map_or(slint::Color::from_argb_u8(0, 0, 0, 0), |(r, g, b)| slint::Color::from_rgb_u8(r, g, b));
+        theme.set_system_accent(accent);
+        let bar = theme.get_toolbar_bg();
+        // A theme colour composited over the bar, as a COLORREF.
+        let over = |top: slint::Color| {
+            let a = top.alpha() as f32 / 255.0;
+            let mix = |t: u8, b: u8| (t as f32 * a + b as f32 * (1.0 - a)).round() as u8;
+            chrome::rgb(mix(top.red(), bar.red()), mix(top.green(), bar.green()), mix(top.blue(), bar.blue()))
+        };
+        chrome::apply(
+            hwnd,
+            Colors {
+                dark: theme.get_dark(),
+                bar: over(bar),
+                text: over(theme.get_text()),
+                disabled: over(theme.get_text_disabled()),
+                hot: over(theme.get_control_hover()),
+            },
+        );
     }
 }
 

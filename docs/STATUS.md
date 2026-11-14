@@ -1,6 +1,6 @@
 # Build status (2026-11-07)
 
-All milestones M0–M10 are built and verified: 166 automated tests (117 unit tests,
+All milestones M0–M10 are built and verified: 168 automated tests (119 unit tests,
 plus 49 backend, integration and headless UI tests, many of them end-to-end), with
 clippy and rustfmt clean. Each requirement's status and evidence is in
 `docs/feature-checklist.md`; gaps are in `docs/known-limitations.md`.
@@ -40,6 +40,10 @@ in `D:\rust`; PDFium via `scripts/fetch-pdfium.ps1`.
 - **Touch, pen and accessibility (ADR 0011):** touch pans, pinches and draws; a pen
   acts as a mouse; the first click after a focus change is no longer lost; Narrator
   can read page text, button states and every control name.
+- **Look (ADR 0012):** title bar, menu bar and toolbar form one surface in the theme's
+  colours, in light and dark; the Windows accent colour and Windows 11's typeface are
+  used; hover and selection fade. Closing with unsaved changes uses a task dialog with
+  Save / Don't Save / Cancel buttons.
 
 ## Open items for the owner
 - Buy or set up a code-signing certificate (an OV certificate on a token, or Azure

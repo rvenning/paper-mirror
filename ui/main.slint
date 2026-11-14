@@ -1,5 +1,5 @@
 // Paper Mirror main document window.
-import { AboutSlint, LineEdit } from "std-widgets.slint";
+import { AboutSlint, LineEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
 import { IconButton, Segmented, ToolbarSeparator, PlainButton, Tooltip, EditBridge, BridgedLineEdit } from "controls.slint";
@@ -191,6 +191,10 @@ export component MainWindow inherits Window {
     callback canvas-viewport-changed();
     callback canvas-ctrl-wheel(delta: float, x: length, y: length);
     callback canvas-pinch(phase: int, scale: float, x: length, y: length);
+    // Light/dark changed (setting or system): Rust repaints the title and menu bars.
+    callback theme-changed();
+    property <bool> theme-dark: Theme.dark;
+    changed theme-dark => { root.theme-changed(); }
     callback canvas-key(event: KeyEvent) -> bool;
     callback canvas-pointer(kind: int, x: length, y: length, shift: bool, ctrl: bool, button: int);
     callback thumbs-viewport-changed();
@@ -241,6 +245,8 @@ export component MainWindow inherits Window {
     min-width: 560px;
     min-height: 380px;
     background: Theme.window-bg;
+    // Windows 11's UI typeface; Slint falls back to its default font where it is missing.
+    default-font-family: Theme.font-family;
     default-font-size: Theme.font-size;
 
     MenuBar {
@@ -890,6 +896,11 @@ export component MainWindow inherits Window {
 
     public function show-about() {
         about.show();
+    }
+
+    // Slint's own widgets follow the app's light/dark choice, not just Windows'.
+    public function set-widget-scheme(dark: bool) {
+        Palette.color-scheme = dark ? ColorScheme.dark : ColorScheme.light;
     }
 
     public function scroll-canvas-to(x: length, y: length) {

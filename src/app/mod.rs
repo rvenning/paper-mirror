@@ -104,6 +104,7 @@ pub fn windows() -> Vec<Rc<DocWindow>> {
 }
 
 pub fn register_window(w: Rc<DocWindow>) {
+    apply_theme_to(&w);
     WINDOWS.with(|ws| ws.borrow_mut().push(w));
 }
 
@@ -152,12 +153,23 @@ pub fn refresh_window_menus() {
     }
 }
 
-/// Applies the appearance preference. `Theme` is a global per window.
+/// Applies the appearance preference, and Windows' own light/dark setting, to every
+/// window. `Theme` is a global per window.
 pub fn apply_appearance() {
-    let appearance = context().settings.borrow().appearance.clone();
     for w in windows() {
-        w.ui.global::<crate::ui::Theme>().set_appearance(appearance.clone().into());
+        apply_theme_to(&w);
     }
+}
+
+/// Sets `w`'s theme from the appearance preference and Windows' light/dark setting,
+/// and makes Slint's own widgets (fields, scroll bars, lists) follow the result rather
+/// than only the system setting.
+pub(crate) fn apply_theme_to(w: &DocWindow) {
+    let appearance = context().settings.borrow().appearance.clone();
+    let theme = w.ui.global::<crate::ui::Theme>();
+    theme.set_system_dark(crate::platform_windows::chrome::system_dark());
+    theme.set_appearance(appearance.into());
+    w.ui.invoke_set_widget_scheme(theme.get_dark());
 }
 
 /// Logs a measurement line when `--measure` is on.

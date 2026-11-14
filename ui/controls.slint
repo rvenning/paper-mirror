@@ -78,6 +78,7 @@ export component IconButton inherits Rectangle {
     height: Theme.icon-button-size;
     border-radius: Theme.radius;
     background: !enabled ? transparent : touch.pressed ? Theme.control-pressed : selected ? Theme.control-selected : touch.has-hover ? Theme.control-hover : transparent;
+    animate background { duration: Theme.motion-fast; }
     accessible-role: button;
     accessible-label: tip;
     accessible-enabled: enabled;
@@ -172,6 +173,7 @@ export component PlainButton inherits Rectangle {
     border-width: primary ? 0px : 1px;
     border-color: Theme.field-border;
     background: !enabled ? Theme.control-hover : primary ? (touch.pressed ? Theme.accent.darker(20%) : Theme.accent) : touch.pressed ? Theme.control-pressed : touch.has-hover ? Theme.control-hover : Theme.field-bg;
+    animate background { duration: Theme.motion-fast; }
     accessible-role: button;
     accessible-label: text;
     accessible-enabled: enabled;

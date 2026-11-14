@@ -167,6 +167,7 @@ export component SignaturesPanel inherits Rectangle {
                     height: 64px;
                     border-radius: 6px;
                     background: s.chosen ? Theme.control-selected : sig-touch.has-hover ? Theme.control-hover : transparent;
+                    animate background { duration: Theme.motion-fast; }
                     accessible-role: button;
                     accessible-label: "Use signature " + s.name;
                     accessible-action-default => { root.chosen(s.id); }

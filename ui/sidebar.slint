@@ -71,6 +71,7 @@ export component ThumbnailList inherits Rectangle {
                 height: t.height + 8px;
                 border-radius: 5px;
                 background: t.selected ? Theme.control-selected : transparent;
+                animate background { duration: Theme.motion-fast; }
             }
             Rectangle {
                 x: 6px;
@@ -186,6 +187,7 @@ export component RowList inherits Rectangle {
                 height: max(26px, row-layout.preferred-height + 8px);
                 border-radius: 5px;
                 background: r.selected ? Theme.control-selected : row-touch.has-hover ? Theme.control-hover : transparent;
+                animate background { duration: Theme.motion-fast; }
                 accessible-role: list-item;
                 accessible-label: r.detail == "" ? r.title : r.title + ", " + r.detail;
                 accessible-item-selectable: true;
@@ -270,6 +272,7 @@ export component SidebarTabs inherits Rectangle {
             border-radius: 5px;
             visible: t.id != "search" || root.has-search;
             background: root.mode == t.id ? Theme.control-selected : tab-touch.has-hover ? Theme.control-hover : transparent;
+            animate background { duration: Theme.motion-fast; }
             accessible-role: tab;
             accessible-label: t.label;
             accessible-item-selectable: true;

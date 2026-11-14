@@ -89,3 +89,10 @@ Reviewed against the release build on 2026-11-07. See also `docs/feature-checkli
 - External glTF buffers and OBJ material libraries must sit in the same folder as the
   model.
 - Models can't be exported as a movie (turntable) or a PDF; export an image of the view.
+
+## Appearance (ADR 0012)
+- The title-bar colours need Windows 11; on Windows 10 the title bar keeps the system
+  colours while the menu bar and toolbar follow the theme.
+- In high-contrast mode the title and menu bars use Windows' high-contrast colours.
+- The Windows accent colour is read when a window opens and when Windows reports a
+  settings change.
