@@ -104,11 +104,33 @@ struct S {
     c: [f32; 3],
 }
 
-const BG_TOP: [f32; 3] = [238.0, 240.0, 244.0];
-const BG_BOTTOM: [f32; 3] = [206.0, 211.0, 220.0];
+/// The background behind a model: a soft vertical gradient (top, bottom).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backdrop {
+    /// For the light theme and for exported images.
+    Light,
+    /// For the dark theme.
+    Dark,
+}
 
-/// Renders `mesh` seen through `cam` into a `w` × `h` RGBA image, supersampled `ss`×.
+impl Backdrop {
+    fn colors(self) -> ([f32; 3], [f32; 3]) {
+        match self {
+            Backdrop::Light => ([238.0, 240.0, 244.0], [206.0, 211.0, 220.0]),
+            Backdrop::Dark => ([44.0, 47.0, 54.0], [24.0, 26.0, 31.0]),
+        }
+    }
+}
+
+/// Renders `mesh` seen through `cam` into a `w` × `h` RGBA image, supersampled `ss`×,
+/// on the light backdrop.
 pub fn render(mesh: &Mesh, cam: &Camera, w: u32, h: u32, ss: u32) -> Vec<u8> {
+    render_on(mesh, cam, w, h, ss, Backdrop::Light)
+}
+
+/// As [`render`], on the given backdrop.
+pub fn render_on(mesh: &Mesh, cam: &Camera, w: u32, h: u32, ss: u32, backdrop: Backdrop) -> Vec<u8> {
+    let (bg_top, bg_bottom) = backdrop.colors();
     let ss = ss.clamp(1, 4);
     let (bw, bh) = (w.max(1) * ss, h.max(1) * ss);
     let (r, u, f) = cam.basis();
@@ -156,7 +178,7 @@ pub fn render(mesh: &Mesh, cam: &Camera, w: u32, h: u32, ss: u32) -> Vec<u8> {
                 // Background gradient.
                 for ry in 0..rows {
                     let t = (y0 + ry) as f32 / bh as f32;
-                    let px = [0, 1, 2].map(|k| (BG_TOP[k] + (BG_BOTTOM[k] - BG_TOP[k]) * t) as u8);
+                    let px = [0, 1, 2].map(|k| (bg_top[k] + (bg_bottom[k] - bg_top[k]) * t) as u8);
                     for x in 0..bw as usize {
                         chunk[(ry * bw as usize + x) * 4..][..4].copy_from_slice(&[px[0], px[1], px[2], 255]);
                     }
@@ -298,6 +320,16 @@ mod tests {
         assert!(corner[0] > 230, "background at the corner: {corner:?}");
         // Supersampled output has the requested size.
         assert_eq!(render(&cube, &cam, 40, 30, 2).len(), 40 * 30 * 4);
+    }
+
+    #[test]
+    fn dark_backdrop_for_the_dark_theme() {
+        let cube = Mesh::flat(Vec::new(), None);
+        let cam = Camera { yaw: 0.0, pitch: 0.0, distance: 5.0, target: [0.0; 3], radius: 1.0 };
+        let light = render(&cube, &cam, 8, 8, 1);
+        let dark = render_on(&cube, &cam, 8, 8, 1, Backdrop::Dark);
+        assert!(light[0] > 230 && dark[0] < 60, "light {} dark {}", light[0], dark[0]);
+        assert_eq!(dark[3], 255, "opaque");
     }
 
     #[test]

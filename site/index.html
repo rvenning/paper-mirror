@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paper Mirror — a free PDF, image and 3D viewer for Windows 11</title>
+  <meta name="description" content="Paper Mirror is a free, open-source PDF, image and 3D viewer and editor for Windows 11, inspired by macOS Preview. Mark up, sign, redact and reorganise PDFs, edit photos and view 3D models. No account, no telemetry, works offline.">
+  <link rel="canonical" href="https://rvenning.github.io/paper-mirror/">
+  <link rel="icon" href="icon-256.png">
+  <meta property="og:title" content="Paper Mirror — a free PDF, image and 3D viewer for Windows 11">
+  <meta property="og:description" content="Mark up, sign, redact and reorganise PDFs, edit photos and view 3D models. Free, open source, offline.">
+  <meta property="og:image" content="https://rvenning.github.io/paper-mirror/screenshots/pdf-light.png">
+  <meta property="og:url" content="https://rvenning.github.io/paper-mirror/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Paper Mirror",
+    "operatingSystem": "Windows 11",
+    "applicationCategory": "UtilitiesApplication",
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "downloadUrl": "https://github.com/rvenning/paper-mirror/releases/latest",
+    "codeRepository": "https://github.com/rvenning/paper-mirror"
+  }
+  </script>
+</head>
+<body>
+  <header class="hero">
+    <nav class="wrap nav">
+      <a class="brand" href="./"><img src="icon-256.png" alt="" width="28" height="28">Paper Mirror</a>
+      <div class="links">
+        <a href="#features">Features</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/rvenning/paper-mirror">GitHub</a>
+      </div>
+    </nav>
+    <div class="wrap intro">
+      <img class="appicon" src="icon-256.png" alt="Paper Mirror icon" width="104" height="104">
+      <h1>Your documents, reflected perfectly.</h1>
+      <p class="lede">A free PDF, image and 3D viewer and editor for Windows 11, inspired by macOS Preview. Mark up, sign, redact and reorganise PDFs, touch up photos and turn 3D models in your hands — in one small, fast window that never goes online.</p>
+      <div class="cta">
+        <a class="button primary" href="https://github.com/rvenning/paper-mirror/releases/latest">Download for Windows 11</a>
+        <a class="button" href="https://github.com/rvenning/paper-mirror">View the source</a>
+      </div>
+      <p class="fine">Free and open source (MIT) · No account · No telemetry · Installs without administrator rights</p>
+    </div>
+    <figure class="shot wrap">
+      <img src="screenshots/pdf-light.png" alt="A PDF open in Paper Mirror with page thumbnails and the Markup toolbar" width="1280" height="820">
+    </figure>
+  </header>
+
+  <main>
+    <section id="features" class="wrap">
+      <h2>Everything you open, in one place</h2>
+      <div class="grid">
+        <article>
+          <h3>PDFs that stay sharp</h3>
+          <p>Continuous, single-page and two-page views, thumbnails, table of contents, bookmarks, search, slideshow and a magnifier. A typical PDF opens in about a quarter of a second.</p>
+        </article>
+        <article>
+          <h3>Markup that stays editable</h3>
+          <p>Highlight, sketch, draw, add shapes, text boxes, notes and signatures. Annotations are standard PDF annotations you can change after saving.</p>
+        </article>
+        <article>
+          <h3>Redaction that really removes</h3>
+          <p>Redacted text, images and graphics are removed from the saved file — not covered with a black box that can be lifted.</p>
+        </article>
+        <article>
+          <h3>Forms, signatures, pages</h3>
+          <p>Fill in forms and sign them. Rotate, reorder, delete, insert, combine and crop pages, or export with effects, a password or a smaller size.</p>
+        </article>
+        <article>
+          <h3>Photos, too</h3>
+          <p>PNG, JPEG, HEIC, WebP, TIFF and more. Crop, resize, adjust colour, remove a background colour with Instant Alpha, and strip location data.</p>
+        </article>
+        <article>
+          <h3>3D models</h3>
+          <p>STL, OBJ, PLY and glTF. Orbit, pan and zoom, fix the orientation, and export to another format or an image.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="gallery wrap" aria-label="Screenshots">
+      <figure><img src="screenshots/pdf-dark.png" alt="Paper Mirror in dark mode with the document Inspector" width="1280" height="820" loading="lazy"><figcaption>Dark mode, all the way to the title bar</figcaption></figure>
+      <figure><img src="screenshots/image-adjust.png" alt="A photo with the Adjust Color panel" width="1280" height="820" loading="lazy"><figcaption>Adjust Color on a photo</figcaption></figure>
+      <figure><img src="screenshots/model-3d.png" alt="A 3D torus knot in the model viewer" width="1280" height="820" loading="lazy"><figcaption>A 3D model, drawn on the CPU</figcaption></figure>
+    </section>
+
+    <section class="band">
+      <div class="wrap two">
+        <div>
+          <h2>Made for Windows 11</h2>
+          <p>Light and dark themes that follow Windows, your accent colour, Windows 11's typeface, Print and Share, and a title bar that blends into the toolbar.</p>
+          <p>Touch and pen work naturally: one finger scrolls, two fingers pinch to zoom, and in a markup tool your finger or pen draws. Narrator can read every control and the text of every page.</p>
+        </div>
+        <div id="privacy">
+          <h2>Private by design</h2>
+          <p>Paper Mirror makes <strong>no network requests at all</strong> — no telemetry, update checks or crash reports — and runs no background services.</p>
+          <p>Before it first saves over a file it keeps the original, and it treats every file as untrusted. <a href="https://github.com/rvenning/paper-mirror/blob/main/SECURITY.md">Read the privacy and security notes.</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="wrap faq">
+      <h2>Questions</h2>
+      <details><summary>Is Paper Mirror free?</summary><p>Yes — free and open source under the MIT licence, for personal and commercial use.</p></details>
+      <details><summary>Why does Windows warn me when I run the installer?</summary><p>Releases aren't code-signed yet, so SmartScreen may say it protected your PC. Choose <em>More info</em>, then <em>Run anyway</em>. Every release lists SHA-256 checksums so you can verify the download.</p></details>
+      <details><summary>Can I make it my default PDF viewer?</summary><p>Yes: Help &gt; Use Paper Mirror for PDFs and Images…, then choose the file types in Settings &gt; Default apps.</p></details>
+      <details><summary>Does it need administrator rights?</summary><p>No. It installs for your account only, or runs from a portable zip.</p></details>
+      <details><summary>Is it made by Apple?</summary><p>No. Paper Mirror is independent and isn't affiliated with or endorsed by Apple.</p></details>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    <p><a href="https://github.com/rvenning/paper-mirror/releases/latest">Download</a> · <a href="https://github.com/rvenning/paper-mirror/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/rvenning/paper-mirror/blob/main/CONTRIBUTING.md">Contribute</a> · <a href="https://github.com/rvenning/paper-mirror/blob/main/LICENSE">MIT licence</a></p>
+    <p class="fine">Paper Mirror is independent software, not affiliated with or endorsed by Apple.</p>
+  </footer>
+</body>
+</html>

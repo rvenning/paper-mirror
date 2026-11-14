@@ -366,7 +366,13 @@ impl DocWindow {
         self.ui.on_thumbs_viewport_changed(move || super::with_window(id, |w| w.update_thumbs()));
         self.ui.on_canvas_ctrl_wheel(move |delta, x, y| super::with_window(id, |w| w.wheel_zoom(delta, x, y)));
         self.ui.on_canvas_pinch(move |phase, scale, x, y| super::with_window(id, |w| w.pinch(phase, scale, x, y)));
-        self.ui.on_theme_changed(move || super::with_window(id, |w| w.apply_chrome()));
+        self.ui.on_theme_changed(move || {
+            super::with_window(id, |w| {
+                w.apply_chrome();
+                // The 3D view's backdrop follows the theme.
+                w.request_model_render();
+            })
+        });
         self.ui.on_canvas_pointer(move |kind, x, y, shift, ctrl, button| {
             super::with_window(id, |w| w.pointer(kind, Point::new(x, y), shift, ctrl, button))
         });

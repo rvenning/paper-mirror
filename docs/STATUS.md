@@ -1,6 +1,6 @@
 # Build status (2026-11-07)
 
-All milestones M0–M10 are built and verified: 168 automated tests (119 unit tests,
+All milestones M0–M10 are built and verified: 169 automated tests (120 unit tests,
 plus 49 backend, integration and headless UI tests, many of them end-to-end), with
 clippy and rustfmt clean. Each requirement's status and evidence is in
 `docs/feature-checklist.md`; gaps are in `docs/known-limitations.md`.

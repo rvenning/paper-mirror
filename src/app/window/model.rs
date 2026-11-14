@@ -140,9 +140,14 @@ impl DocWindow {
         let (w, h) = (((vp.w * sf).round() as u32).max(1), ((vp.h * sf).round() as u32).max(1));
         // While dragging, draw at half resolution without supersampling.
         let (rw, rh, ss) = if quick { ((w / 2).max(1), (h / 2).max(1), 1) } else { (w, h, 2) };
+        let backdrop = if self.ui.global::<crate::ui::Theme>().get_dark() {
+            raster::Backdrop::Dark
+        } else {
+            raster::Backdrop::Light
+        };
         let win = self.id;
         std::thread::spawn(move || {
-            let px = raster::render(&mesh, &camera, rw, rh, ss);
+            let px = raster::render_on(&mesh, &camera, rw, rh, ss, backdrop);
             let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&px, rw, rh);
             let _ = slint::invoke_from_event_loop(move || {
                 super::super::with_window(win, |w| w.on_model_rendered(generation, buf));

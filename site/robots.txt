@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rvenning.github.io/paper-mirror/sitemap.xml
