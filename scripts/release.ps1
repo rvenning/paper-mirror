@@ -35,7 +35,8 @@ foreach ($l in $lines[$start..($lines.Count - 1)]) {
     $notes += $l
 }
 $notesFile = Join-Path $env:TEMP "paper-mirror-$tag-notes.md"
-Set-Content -Encoding utf8 $notesFile (($notes -join "`n").Trim())
+# Without a byte-order mark (Set-Content -Encoding utf8 adds one, which gh keeps).
+[IO.File]::WriteAllText($notesFile, (($notes -join "`n").Trim()))
 
 $pkg = @{}
 if ($CertificateThumbprint) { $pkg.CertificateThumbprint = $CertificateThumbprint }
