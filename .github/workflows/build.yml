@@ -1,0 +1,87 @@
+name: Build and test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Same llvm-mingw release as the development PC (ADR 0001); checksum from GitHub.
+  LLVM_MINGW: llvm-mingw-20261104-ucrt-x86_64
+  LLVM_MINGW_SHA256: 552191b5754c49a5a20723276a6fc56541ea1922c4c50b7b669022333fc1b40f
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install llvm-mingw
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\$env:LLVM_MINGW.zip"
+          Invoke-WebRequest "https://github.com/mstorsjo/llvm-mingw/releases/download/20261104/$env:LLVM_MINGW.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:LLVM_MINGW_SHA256) { throw "llvm-mingw checksum mismatch: $hash" }
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          "$env:RUNNER_TEMP\$env:LLVM_MINGW\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Install Rust (pinned in rust-toolchain.toml)
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.99.1-x86_64-pc-windows-gnullvm --profile minimal -c clippy -c rustfmt --force-non-host
+          rustup show active-toolchain
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Cache PDFium
+        uses: actions/cache@v4
+        with:
+          path: third_party/pdfium
+          key: pdfium-${{ hashFiles('scripts/fetch-pdfium.ps1') }}
+
+      - name: Fetch PDFium (pinned, checksum verified)
+        shell: pwsh
+        run: ./scripts/fetch-pdfium.ps1
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --no-fail-fast
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-mirror-${{ github.sha }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          retention-days: 14

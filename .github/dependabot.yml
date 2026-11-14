@@ -1,0 +1,8 @@
+# Keeps the workflow actions current. Rust crates are pinned to exact versions on
+# purpose (each one is justified in docs/decisions), so they are updated by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
