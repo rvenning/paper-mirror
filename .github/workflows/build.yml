@@ -44,7 +44,7 @@ jobs:
           rustup show active-toolchain
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -54,7 +54,7 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-
 
       - name: Cache PDFium
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/pdfium
           key: pdfium-${{ hashFiles('scripts/fetch-pdfium.ps1') }}
