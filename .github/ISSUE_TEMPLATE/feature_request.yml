@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest something Paper Mirror should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do?
+      description: Describe the task, and how you do it today (for example in macOS Preview).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested behaviour
